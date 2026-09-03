@@ -145,10 +145,10 @@ only when `REDIS_URL` is set.
 
 - **Discord OAuth and paid licences.** The `{kind, id}` identity shape and the
   `canUseCustomPrompt` flag are the seams they attach to.
-- **Client wiring.** The mod can already reach this service by hand — set the
-  OpenAI-compatible provider's base URL and paste the device token as the key —
-  but there is no one-click "use the free announcer" preset, and no UI for
-  picking a `style` or showing remaining quota. The `X-Lunatic-Quota-Remaining`
-  response header and `GET /v1/quota` exist for that.
+- **A verified run inside Sauce.** The client wiring is done — the mod has a
+  `hosted` provider with a Connect button, model and voice pickers filled from
+  `/v1/models` and `/v1/styles`, and a quota readout — and it has been driven
+  end to end against this service from Node. It has not yet run inside a real
+  Sauce overlay.
 - **A durable-storage guard.** The service will start and serve happily with
   in-memory counters; it warns in `/healthz` but does not refuse.
