@@ -23,8 +23,20 @@ prompting. Accounts (Discord OAuth) and paid licences are **not built yet**;
    the spend breaker live in process memory and reset on every deploy.
 3. Set variables from [`.env.example`](.env.example). At minimum: `FAST_API_KEY`,
    `TOKEN_SECRET`, `DAILY_BUDGET_USD`.
-4. Check `GET /healthz`. It reports whether storage is durable and what the day
-   has cost so far — both things you otherwise discover from a bill.
+4. Verify the deploy:
+
+   ```bash
+   node scripts/smoke.mjs https://your-app.up.railway.app          # free
+   node scripts/smoke.mjs https://your-app.up.railway.app --live   # + one real call
+   ```
+
+   It checks health, the model and voice lists, token minting, that
+   unauthenticated calls are rejected, and the prompt-size cap. `--live` adds
+   one real commentary call — a fraction of a cent — and reports time to first
+   token, which is the number that actually determines whether the spoken
+   commentary feels right. It exits non-zero on failure, so it can gate a
+   deploy, and it warns loudly about the two mistakes a fresh deploy makes:
+   no Redis, and fewer than three models configured.
 
 ## Endpoints
 
@@ -108,6 +120,16 @@ At roughly 1,000 input and 60 output tokens per call, a call costs about
 $0.0013 and a racing hour $0.10–0.39. 150 calls/month is about one racing hour,
 or ~$0.20 per user — so 1,000 active free users is roughly $195/month. Size
 `DAILY_BUDGET_USD` against what you are willing to lose, not against demand.
+
+## Verifying a deploy
+
+`scripts/smoke.mjs` is the fastest way to tell a working deployment from a
+half-configured one. The two warnings worth acting on:
+
+- **`durable storage — IN-MEMORY`.** Quotas and the spend breaker reset on every
+  deploy. Add the Redis plugin.
+- **`only N configured`.** An alias needs both a model id and an API key, or it
+  is silently not offered.
 
 ## Local development
 
