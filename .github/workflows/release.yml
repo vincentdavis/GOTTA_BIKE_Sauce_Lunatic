@@ -3,53 +3,99 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # Dry run from a branch: runs the checks, builds the zip, uploads it as a
+  # workflow artifact and publishes nothing. Lets you exercise the whole
+  # release path without spending a tag.
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  MOD_FOLDER: GOTTA_BIKE_Sauce_Lunatic
 
 jobs:
+  # Same job CI runs on main and on PRs -- manifest, JS syntax, asset refs.
+  # A tag that fails it never reaches the publish step.
+  validate:
+    uses: ./.github/workflows/ci.yml
+
   release:
+    needs: validate
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          fetch-depth: 0    # the "tag is on main" check needs real history
 
-      - name: Tag must match manifest version
+      - name: Resolve version
         id: ver
         run: |
-          TAG="${GITHUB_REF_NAME#v}"
           MANIFEST=$(python3 -c "import json;print(json.load(open('manifest.json'))['version'])")
-          echo "tag=$TAG manifest=$MANIFEST"
-          if [ "$TAG" != "$MANIFEST" ]; then
+
+          if [ "$GITHUB_REF_TYPE" != tag ]; then
+            echo "Dry run from $GITHUB_REF_NAME: building $MANIFEST, publishing nothing."
+            echo "version=$MANIFEST" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          TAG="${GITHUB_REF_NAME#v}"
+          BASE="${TAG%%-*}"   # v0.2.0-rc1 -> 0.2.0, so a pre-release shares the manifest version
+          echo "tag=$TAG base=$BASE manifest=$MANIFEST"
+
+          if [ "$BASE" != "$MANIFEST" ]; then
             echo "::error::Tag v$TAG does not match manifest.json version $MANIFEST. Bump the manifest and re-tag."
             exit 1
           fi
-          echo "version=$MANIFEST" >> "$GITHUB_OUTPUT"
 
-      - name: Validate and syntax-check
+          # The zip keeps the full tag, so an -rc build is never mistaken for
+          # the release it is a candidate for.
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+          if [ "$BASE" != "$TAG" ]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Full releases must be tagged on main
+        if: github.ref_type == 'tag' && steps.ver.outputs.prerelease == 'false'
         run: |
-          python3 -c "import json;json.load(open('manifest.json'))"
-          for f in pages/src/*.mjs; do node --check "$f"; done
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor HEAD FETCH_HEAD; then
+            echo "::error::Tag $GITHUB_REF_NAME is not an ancestor of main. Tag a merged commit, or use a -rc suffix to publish it as a pre-release."
+            exit 1
+          fi
+          echo "$GITHUB_REF_NAME is on main"
 
       - name: Build mod zip
         run: |
           V="${{ steps.ver.outputs.version }}"
-          OUT="build/GOTTA_BIKE_Sauce_Lunatic"
+          OUT="build/$MOD_FOLDER"
           mkdir -p "$OUT"
           cp manifest.json "$OUT/"
           cp -r pages "$OUT/"
           [ -f LICENSE ] && cp LICENSE "$OUT/"
           find "$OUT" -name '.DS_Store' -delete
-          cd build && zip -qr "GOTTA_BIKE_Sauce_Lunatic_${V}.zip" GOTTA_BIKE_Sauce_Lunatic
+          cd build && zip -qr "${MOD_FOLDER}_${V}.zip" "$MOD_FOLDER"
           ls -lh *.zip
 
+      - name: Upload dry-run zip
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.MOD_FOLDER }}_${{ steps.ver.outputs.version }}
+          path: build/*.zip
+
       - name: Publish release
-        uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           files: build/*.zip
           generate_release_notes: true
+          prerelease: ${{ steps.ver.outputs.prerelease == 'true' }}
           body: |
             ## Install
 

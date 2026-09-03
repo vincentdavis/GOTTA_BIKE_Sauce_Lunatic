@@ -97,6 +97,19 @@ const TOKEN_COSTS = {
     'claude-opus-5': { input: 0.005, output: 0.025 }
 };
 
+// Sonnet 5 and Opus 5 run ADAPTIVE thinking when the `thinking` key is omitted
+// (Opus 5 changed this from 4.8/4.7, which stayed off). Thinking tokens are
+// billed against max_tokens -- 60 by default here and capped at 200 in the
+// settings form -- so the whole budget is spent inside the thinking block, no
+// text is ever emitted, and the stream ends empty. Disable it explicitly for
+// those models. Haiku 4.5 does not think unless asked, so it sends no key at
+// all; a model missing from this set simply keeps the default behaviour.
+const ADAPTIVE_THINKING_MODELS = new Set(['claude-sonnet-5', 'claude-opus-5']);
+
+// With thinking disabled, Opus 5 occasionally leaks `<thinking>` tags into the
+// visible text. One line of system prompt is cheaper than stripping them out.
+const NO_INTERNAL_TAGS = 'Do not include internal or system XML tags in your response.';
+
 // State
 let storedAthleteData = {};
 let nearbyData = [];
@@ -1322,6 +1335,8 @@ async function callClaudeAPI(systemPrompt, userPrompt) {
     const apiKey = common.settingsStore.get('claudeApiKey');
     const model = common.settingsStore.get('claudeModel') || DEFAULT_MODEL;
     const maxTokens = common.settingsStore.get('maxTokens') || 60;
+    const thinkingOff = ADAPTIVE_THINKING_MODELS.has(model);
+    const systemText = thinkingOff ? `${systemPrompt}\n\n${NO_INTERNAL_TAGS}` : systemPrompt;
     const textEl = document.querySelector('#current-commentary .commentary-text');
 
     // One attempt = one AbortController (an aborted controller can't be reused).
@@ -1354,7 +1369,8 @@ async function callClaudeAPI(systemPrompt, userPrompt) {
                 body: JSON.stringify({
                     model: model,
                     max_tokens: maxTokens,
-                    system: systemPrompt,
+                    system: systemText,
+                    ...(thinkingOff ? { thinking: { type: 'disabled' } } : {}),
                     messages: [{ role: 'user', content: userPrompt }],
                     stream: true
                 })
@@ -1700,6 +1716,7 @@ async function setupTestConnection() {
             return;
         }
 
+        const testModel = common.settingsStore.get('claudeModel') || DEFAULT_MODEL;
         testBtn.disabled = true;
         statusEl.textContent = 'Testing...';
         statusEl.className = 'loading';
@@ -1714,8 +1731,12 @@ async function setupTestConnection() {
                     'anthropic-dangerous-direct-browser-access': 'true'
                 },
                 body: JSON.stringify({
-                    model: common.settingsStore.get('claudeModel') || DEFAULT_MODEL,
+                    model: testModel,
                     max_tokens: 10,
+                    // Match the overlay's request shape -- without this a
+                    // thinking model burns the 10 tokens on thought and the
+                    // test reports success for a model that never speaks.
+                    ...(ADAPTIVE_THINKING_MODELS.has(testModel) ? { thinking: { type: 'disabled' } } : {}),
                     messages: [{ role: 'user', content: 'Say "OK"' }]
                 })
             });

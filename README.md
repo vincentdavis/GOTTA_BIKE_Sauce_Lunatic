@@ -35,7 +35,7 @@ commentary wants. Roughly $0.15–0.35 per hour of racing at the default cadence
 
 ## Install
 
-1. Download the latest zip from [Releases](https://github.com/vincentdavis/BOTTA_BIKE_Sauce_Lunatic/releases).
+1. Download the latest zip from [Releases](https://github.com/vincentdavis/GOTTA_BIKE_Sauce_Lunatic/releases).
 2. Unzip into `~/Documents/SauceMods/` so you have
    `SauceMods/GOTTA_BIKE_Sauce_Lunatic/manifest.json`.
 3. Restart Sauce4Zwift, enable the mod, open the **Lunatic Announcer** window.
@@ -71,7 +71,14 @@ Releases are tag-driven. Bump `version` in `manifest.json`, then:
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-CI refuses to publish if the tag and the manifest version disagree.
+CI refuses to publish if the tag and the manifest version disagree, or if a
+full release is tagged on a commit that never reached `main`.
+
+A `-rc` suffix publishes a pre-release against the same manifest version
+(`v0.2.0-rc1` -> manifest `0.2.0`), and is exempt from the `main` check.
+To exercise the whole build without spending a tag, run the **Release**
+workflow manually from any branch: it validates, builds the zip and uploads
+it as a workflow artifact instead of publishing.
 
 ## License
 
