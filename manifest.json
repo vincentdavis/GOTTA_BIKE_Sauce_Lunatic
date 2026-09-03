@@ -1,0 +1,27 @@
+{
+    "manifest_version": 1,
+    "name": "GOTTA.BIKE Sauce Lunatic",
+    "description": "Like having Phil Liggett announcing your Zwift race, if he was a lunatic. AI race commentary, spoken aloud.",
+    "author": "Vincent Davis",
+    "website_url": "https://gotta.bike",
+    "version": "0.1.0",
+    "content_js": [],
+    "content_css": [],
+    "web_root": "pages",
+    "windows": [
+        {
+            "file": "pages/announcer.html",
+            "id": "announcer",
+            "name": "Lunatic Announcer",
+            "description": "AI race commentary in the style of an unhinged TV commentator, spoken aloud",
+            "overlay": true,
+            "frame": false,
+            "default_bounds": {
+                "width": 420,
+                "height": 340,
+                "x": 100,
+                "y": 100
+            }
+        }
+    ]
+}

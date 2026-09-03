@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Tag must match manifest version
+        id: ver
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          MANIFEST=$(python3 -c "import json;print(json.load(open('manifest.json'))['version'])")
+          echo "tag=$TAG manifest=$MANIFEST"
+          if [ "$TAG" != "$MANIFEST" ]; then
+            echo "::error::Tag v$TAG does not match manifest.json version $MANIFEST. Bump the manifest and re-tag."
+            exit 1
+          fi
+          echo "version=$MANIFEST" >> "$GITHUB_OUTPUT"
+
+      - name: Validate and syntax-check
+        run: |
+          python3 -c "import json;json.load(open('manifest.json'))"
+          for f in pages/src/*.mjs; do node --check "$f"; done
+
+      - name: Build mod zip
+        run: |
+          V="${{ steps.ver.outputs.version }}"
+          OUT="build/GOTTA_BIKE_Sauce_Lunatic"
+          mkdir -p "$OUT"
+          cp manifest.json "$OUT/"
+          cp -r pages "$OUT/"
+          [ -f LICENSE ] && cp LICENSE "$OUT/"
+          find "$OUT" -name '.DS_Store' -delete
+          cd build && zip -qr "GOTTA_BIKE_Sauce_Lunatic_${V}.zip" GOTTA_BIKE_Sauce_Lunatic
+          ls -lh *.zip
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/*.zip
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            1. Download the zip below.
+            2. Unzip it into `~/Documents/SauceMods/` (macOS) so you have
+               `SauceMods/GOTTA_BIKE_Sauce_Lunatic/manifest.json`.
+            3. Restart Sauce4Zwift and enable the mod, then open the
+               **Lunatic Announcer** window.
+
+            ## Requires your own Anthropic API key
+
+            This mod calls the Claude API directly from the overlay using a key
+            you supply in its settings. Usage is billed to **your** Anthropic
+            account. Rider data and your key are sent from the browser overlay
+            to `api.anthropic.com`.
+
+            Spoken commentary is **off by default** - enable it with the
+            speaker button in the window titlebar.

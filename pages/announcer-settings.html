@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html class="settings-page" data-settings-key="lunatic-announcer-settings-v1">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';"/>
+
+    <title>Lunatic Announcer Settings</title>
+
+    <link id="favicon" rel="shortcut icon" href="./images/favicon.png"/>
+    <link rel="stylesheet" href="/pages/css/common.css"/>
+    <link rel="stylesheet" href="./css/announcer.css"/>
+</head>
+<body>
+    <div id="titlebar">
+        <header>
+            <div class="logo"><img src="./images/icon128.png"/></div>
+            <div class="title">Lunatic Announcer Settings</div>
+            <div class="filler"></div>
+            <div class="buttons">
+                <div title="Close this window" class="button close electron-only"><ms>close</ms></div>
+            </div>
+        </header>
+    </div>
+
+    <div class="tab-navigation">
+        <button type="button" class="tab-btn active" data-tab="settings-tab">Settings</button>
+        <button type="button" class="tab-btn" data-tab="api-tab">Claude API</button>
+        <button type="button" class="tab-btn" data-tab="prompts-tab">Prompts</button>
+        <button type="button" class="tab-btn" data-tab="data-tab">Data Fields</button>
+        <button type="button" class="tab-btn" data-tab="help-tab">Help</button>
+    </div>
+
+    <!-- Settings Tab -->
+    <div id="settings-tab" class="tab-panel active">
+        <div class="settings-content">
+            <section class="settings-section">
+                <h2>Display Options</h2>
+                <form id="display-options">
+                    <label>
+                        <key>Font scaling:</key>
+                        <input type="range" name="fontScale" min="0.5" max="2" step="0.1"/>
+                        <input type="number" name="fontScale" min="0.5" max="2" step="0.1" style="--size: 4"/>
+                    </label>
+                    <label>
+                        <key>Background:</key>
+                        <select name="backgroundOption">
+                            <option value="transparent">Transparent</option>
+                            <option value="black">Black</option>
+                            <option value="sauce">Sauce Default</option>
+                            <option value="darkGray">Dark Gray</option>
+                            <option value="darkBlue">Dark Blue</option>
+                            <option value="darkGreen">Dark Green</option>
+                            <option value="custom">Custom Color</option>
+                        </select>
+                    </label>
+                    <label class="custom-color-row">
+                        <key>Custom color:</key>
+                        <input type="color" name="customBackgroundColor" value="#232323"/>
+                    </label>
+                </form>
+            </section>
+
+            <section class="settings-section">
+                <h2>Update Settings</h2>
+                <p class="help-text">With live cadence on, commentary fires when something actually happens
+                    on the road &mdash; an attack, a split, a catch &mdash; instead of on a fixed clock.
+                    The interval below then acts as the longest allowed silence.</p>
+                <form id="update-options">
+                    <label>
+                        <key>Live cadence (fire on race events):</key>
+                        <input type="checkbox" name="eventDriven"/>
+                    </label>
+                    <label>
+                        <key>Minimum gap between lines (s):</key>
+                        <input type="number" name="minInterval" min="6" max="60" step="1" style="--size: 4"/>
+                    </label>
+                    <label>
+                        <key>Longest silence:</key>
+                        <select name="updateInterval">
+                            <option value="0">Manual only</option>
+                            <option value="30">30 seconds</option>
+                            <option value="45">45 seconds</option>
+                            <option value="60">1 minute</option>
+                            <option value="120">2 minutes</option>
+                            <option value="180">3 minutes</option>
+                            <option value="300">5 minutes</option>
+                        </select>
+                    </label>
+                    <label>
+                        <key>Max riders to analyze:</key>
+                        <input type="number" name="maxRiders" min="3" max="30" step="1" style="--size: 5"/>
+                    </label>
+                    <label>
+                        <key>History entries to keep:</key>
+                        <input type="number" name="historyCount" min="0" max="10" step="1" style="--size: 4"/>
+                    </label>
+                </form>
+            </section>
+
+            <section class="settings-section">
+                <h2>Announcer Audio</h2>
+                <p class="help-text">Speaks each line aloud as it streams in, so you can race without
+                    reading the overlay. Uses your Mac's built-in voices &mdash; no extra API cost and no
+                    network round trip. The <ms>volume_up</ms> button in the main window mutes it quickly.</p>
+                <form id="audio-options">
+                    <label>
+                        <key>Speak commentary aloud:</key>
+                        <input type="checkbox" name="ttsEnabled"/>
+                    </label>
+                    <label>
+                        <key>Voice:</key>
+                        <select name="ttsVoice" id="tts-voice"></select>
+                    </label>
+                    <label>
+                        <key>Rate:</key>
+                        <input type="range" name="ttsRate" min="0.8" max="1.8" step="0.05"/>
+                        <input type="number" name="ttsRate" min="0.8" max="1.8" step="0.05" style="--size: 4"/>
+                    </label>
+                    <label>
+                        <key>Pitch:</key>
+                        <input type="range" name="ttsPitch" min="0.5" max="1.5" step="0.05"/>
+                        <input type="number" name="ttsPitch" min="0.5" max="1.5" step="0.05" style="--size: 4"/>
+                    </label>
+                    <label>
+                        <key>Volume:</key>
+                        <input type="range" name="ttsVolume" min="0" max="1" step="0.05"/>
+                    </label>
+                </form>
+                <div class="api-actions">
+                    <button type="button" id="test-voice-btn">Test Voice</button>
+                </div>
+                <p class="help-text">Tip: Apple's free Enhanced/Premium voices sound noticeably better at the
+                    same speed &mdash; System Settings &rsaquo; Accessibility &rsaquo; Spoken Content &rsaquo; Manage Voices.</p>
+            </section>
+        </div>
+    </div>
+
+    <!-- Claude API Tab -->
+    <div id="api-tab" class="tab-panel">
+        <div class="settings-content">
+            <section class="settings-section">
+                <h2>Claude API Configuration</h2>
+                <p class="help-text">Enter your Anthropic API key to enable AI-powered race commentary.</p>
+
+                <form id="api-options">
+                    <label class="api-key-row">
+                        <key>API Key:</key>
+                        <input type="password" name="claudeApiKey" id="claude-api-key"
+                               placeholder="sk-ant-api03-..." autocomplete="off"/>
+                        <button type="button" id="toggle-key-visibility" class="icon-btn" title="Show/hide key">
+                            <ms>visibility</ms>
+                        </button>
+                    </label>
+
+                    <label>
+                        <key>Model:</key>
+                        <select name="claudeModel">
+                            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Fastest, cheapest &mdash; best for live)</option>
+                            <option value="claude-sonnet-5">Claude Sonnet 5 (Balanced)</option>
+                            <option value="claude-opus-5">Claude Opus 5 (Most capable, slowest)</option>
+                        </select>
+                    </label>
+
+                    <label>
+                        <key>Max tokens:</key>
+                        <input type="number" name="maxTokens" min="40" max="200" step="10" style="--size: 6"/>
+                    </label>
+                </form>
+
+                <div class="api-actions">
+                    <button type="button" id="test-api-btn">Test Connection</button>
+                    <span id="api-test-status"></span>
+                </div>
+
+                <div id="api-info" class="api-info" hidden>
+                    <div class="api-info-row">
+                        <span class="api-label">Status:</span>
+                        <span id="api-status-text" class="api-value">Connected</span>
+                    </div>
+                    <div class="api-info-row">
+                        <span class="api-label">Model:</span>
+                        <span id="api-model-text" class="api-value">-</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="settings-section">
+                <h2>Cost Tracking</h2>
+                <div class="cost-info">
+                    <div class="cost-row">
+                        <span class="cost-label">Session cost:</span>
+                        <span id="session-cost-display" class="cost-value">$0.00</span>
+                    </div>
+                    <div class="cost-row">
+                        <span class="cost-label">Total calls:</span>
+                        <span id="total-calls-display" class="cost-value">0</span>
+                    </div>
+                    <button type="button" id="reset-cost-btn" class="secondary-btn">Reset Session Cost</button>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Prompts Tab -->
+    <div id="prompts-tab" class="tab-panel">
+        <div class="settings-content">
+            <section class="settings-section">
+                <h2>Commentary Style</h2>
+                <p class="help-text">Choose a preset style or customize the prompts for your preferred commentary style.</p>
+
+                <form id="prompt-options">
+                    <label>
+                        <key>Style preset:</key>
+                        <select name="stylePreset" id="style-preset">
+                            <option value="dramatic">Tour de France - Punchy race-call, one line</option>
+                            <option value="tactical">Tactical Coach - Attack advice, threats to watch</option>
+                            <option value="custom">Custom - Use your own prompts</option>
+                        </select>
+                    </label>
+                </form>
+            </section>
+
+            <section class="settings-section custom-prompts-section">
+                <h2>Custom Prompts</h2>
+                <p class="help-text">Customize the system and user messages sent to Claude. Only used when "Custom" style is selected.</p>
+
+                <div class="prompt-group">
+                    <label class="prompt-label">System Message:</label>
+                    <textarea id="custom-system-prompt" name="customSystemPrompt" rows="6"
+                              placeholder="You are a cycling race commentator..."></textarea>
+                </div>
+
+                <div class="prompt-group">
+                    <label class="prompt-label">User Message Template:</label>
+                    <textarea id="custom-user-prompt" name="customUserPrompt" rows="6"
+                              placeholder="Provide commentary on the current race situation..."></textarea>
+                    <p class="prompt-help">Placeholders: <code>{riders}</code> the field in road order,
+                        <code>{watching}</code> the watched athlete, <code>{raceContext}</code> distance to go
+                        and placing, <code>{events}</code> what just changed on the road, <code>{recentLines}</code>
+                        what you already said. Any you leave out are appended automatically.</p>
+                </div>
+
+                <div class="prompt-actions">
+                    <button type="button" id="reset-prompts-btn" class="secondary-btn">Reset to Default</button>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Data Fields Tab -->
+    <div id="data-tab" class="tab-panel">
+        <div class="settings-content">
+            <section class="settings-section">
+                <h2>Live Data Fields</h2>
+                <p class="help-text">Select which live data to include in the analysis.</p>
+
+                <div class="data-field-group">
+                    <h3>Real-time Data</h3>
+                    <div class="field-checkboxes">
+                        <label class="field-checkbox">
+                            <input type="checkbox" name="sendPower" checked/>
+                            <span>Current Power (watts)</span>
+                        </label>
+                        <label class="field-checkbox">
+                            <input type="checkbox" name="sendHeartRate" checked/>
+                            <span>Heart Rate</span>
+                        </label>
+                        <label class="field-checkbox">
+                            <input type="checkbox" name="sendGap" checked/>
+                            <span>Gap (time difference)</span>
+                        </label>
+                        <label class="field-checkbox">
+                            <input type="checkbox" name="sendDraft" checked/>
+                            <span>Draft (watts saved)</span>
+                        </label>
+                        <label class="field-checkbox">
+                            <input type="checkbox" name="sendSpeed" checked/>
+                            <span>Speed</span>
+                        </label>
+                        <label class="field-checkbox">
+                            <input type="checkbox" name="sendCadence"/>
+                            <span>Cadence</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="data-field-group">
+                    <h3>Power Duration Data</h3>
+                    <div class="field-checkboxes">
+                        <label class="field-checkbox">
+                            <input type="checkbox" name="sendPower5s"/>
+                            <span>5-second power</span>
+                        </label>
+                        <label class="field-checkbox">
+                            <input type="checkbox" name="sendPower15s" checked/>
+                            <span>5s rolling power (current effort)</span>
+                        </label>
+                        <label class="field-checkbox">
+                            <input type="checkbox" name="sendPower60s" checked/>
+                            <span>60s rolling power (their baseline)</span>
+                        </label>
+                        <label class="field-checkbox">
+                            <input type="checkbox" name="sendPower300s"/>
+                            <span>5-minute power</span>
+                        </label>
+                        <label class="field-checkbox">
+                            <input type="checkbox" name="sendPower1200s"/>
+                            <span>20-minute power</span>
+                        </label>
+                    </div>
+                </div>
+            </section>
+
+            <section class="settings-section">
+                <h2>Stored Athlete Data (GOTTA.BIKE)</h2>
+                <p class="help-text">Include stored power profiles and race data from GOTTA.BIKE.</p>
+
+                <div class="data-field-group">
+                    <h3>Power Profile</h3>
+                    <div class="field-checkboxes">
+                        <label class="field-checkbox">
+                            <input type="checkbox" name="sendFTP" checked/>
+                            <span>FTP (Functional Threshold Power)</span>
+                        </label>
+                        <label class="field-checkbox">
+                            <input type="checkbox" name="sendCP"/>
+                            <span>Critical Power</span>
+                        </label>
+                        <label class="field-checkbox">
+                            <input type="checkbox" name="sendPowerCurve"/>
+                            <span>Power curve (W/kg at durations)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="data-field-group">
+                    <h3>Phenotype & Suitability</h3>
+                    <div class="field-checkboxes">
+                        <label class="field-checkbox">
+                            <input type="checkbox" name="sendPhenotype" checked/>
+                            <span>Phenotype (sprinter, climber, etc.)</span>
+                        </label>
+                        <label class="field-checkbox">
+                            <input type="checkbox" name="sendRouteSuitability"/>
+                            <span>Route suitability (flat, hilly, etc.)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="data-field-group">
+                    <h3>Race History</h3>
+                    <div class="field-checkboxes">
+                        <label class="field-checkbox">
+                            <input type="checkbox" name="sendRaceRating" checked/>
+                            <span>Race rating</span>
+                        </label>
+                        <label class="field-checkbox">
+                            <input type="checkbox" name="sendRaceStats"/>
+                            <span>Race stats (wins, podiums, finishes)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="data-field-group">
+                    <h3>Physical</h3>
+                    <div class="field-checkboxes">
+                        <label class="field-checkbox">
+                            <input type="checkbox" name="sendWeight"/>
+                            <span>Weight</span>
+                        </label>
+                    </div>
+                </div>
+            </section>
+
+            <section class="settings-section">
+                <h2>Watching Athlete</h2>
+                <p class="help-text">Include the watching athlete's data for personalized tactical advice.</p>
+
+                <div class="field-checkboxes">
+                    <label class="field-checkbox">
+                        <input type="checkbox" name="includeWatchingAthlete" checked/>
+                        <span>Include watching athlete's data in analysis</span>
+                    </label>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Help Tab -->
+    <div id="help-tab" class="tab-panel">
+        <div class="help-content">
+            <section class="settings-section">
+                <h2>Getting Started</h2>
+                <ol>
+                    <li><strong>Get an API key:</strong> Sign up at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> and create an API key.</li>
+                    <li><strong>Enter your key:</strong> Go to the Claude API tab and paste your API key.</li>
+                    <li><strong>Test connection:</strong> Click "Test Connection" to verify your key works.</li>
+                    <li><strong>Choose a style:</strong> Select a commentary style preset or create your own.</li>
+                    <li><strong>Start riding:</strong> The commentary will automatically update during your ride.</li>
+                </ol>
+            </section>
+
+            <section class="settings-section">
+                <h2>Commentary Styles</h2>
+                <ul>
+                    <li><strong>Professional:</strong> Concise tactical analysis focusing on power data and race positioning.</li>
+                    <li><strong>Casual:</strong> Friendly commentary using cycling slang and community terms.</li>
+                    <li><strong>Dramatic:</strong> Exciting play-by-play that builds tension and highlights key moments.</li>
+                    <li><strong>Tactical Coach:</strong> Direct advice on when to attack, who to watch, and how to respond.</li>
+                    <li><strong>Custom:</strong> Write your own system and user prompts for fully customized commentary.</li>
+                </ul>
+            </section>
+
+            <section class="settings-section">
+                <h2>Cost Information</h2>
+                <p>Claude API pricing (approximate, per 1K tokens):</p>
+                <ul>
+                    <li><strong>Haiku 4.5:</strong> ~$0.001 per 1K input tokens, ~$0.005 per 1K output tokens</li>
+                    <li><strong>Sonnet 5:</strong> ~$0.002 per 1K input tokens, ~$0.010 per 1K output tokens</li>
+                    <li><strong>Opus 5:</strong> ~$0.005 per 1K input tokens, ~$0.025 per 1K output tokens</li>
+                </ul>
+                <p>A typical commentary request uses ~500-1000 tokens. With Haiku at 60-second intervals, expect costs around $0.15-0.35 per hour of racing.</p>
+            </section>
+
+            <section class="settings-section">
+                <h2>Tips</h2>
+                <ul>
+                    <li>Use <strong>Haiku</strong> for best speed and lowest cost - it's perfect for live commentary.</li>
+                    <li>Reduce <strong>max tokens</strong> for shorter, punchier commentary.</li>
+                    <li>Select fewer <strong>data fields</strong> to focus commentary on what matters most to you.</li>
+                    <li>The <strong>pause button</strong> in the main window stops auto-updates but keeps history.</li>
+                    <li>Click <strong>copy</strong> to share particularly good commentary.</li>
+                </ul>
+            </section>
+        </div>
+    </div>
+
+    <script type="module">
+        import {lunaticAnnouncerSettingsMain} from './src/announcer.mjs';
+        lunaticAnnouncerSettingsMain();
+    </script>
+</body>
+</html>

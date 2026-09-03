@@ -1,0 +1,689 @@
+/* Live Commentary Window Styles */
+
+:root {
+    --font-scale: 1;
+    --background-color: #000000;
+}
+
+body {
+    font-size: calc(14px * var(--font-scale));
+    overflow: hidden;
+    margin: 0;
+    height: 100vh;
+}
+
+body.transparent-bg {
+    background: transparent;
+}
+
+body.solid-background {
+    background: var(--background-color);
+}
+
+/* ============================================================================
+   Main Window Styles
+   ============================================================================ */
+
+#content {
+    padding: 0.5em;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+    height: calc(100vh - 40px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
+}
+
+/* Status Bar */
+#status-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1em;
+    padding: 0.4em 0.6em;
+    font-size: 0.8em;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 0.3em;
+}
+
+.status-label {
+    color: #888;
+}
+
+.status-value {
+    color: #fff;
+    font-weight: 500;
+}
+
+.status-value.not-configured {
+    color: #ff9800;
+}
+
+.status-value.connected {
+    color: #4caf50;
+}
+
+.status-value.error {
+    color: #f44336;
+}
+
+.status-value.paused {
+    color: #ff9800;
+}
+
+.status-value.active {
+    color: #4caf50;
+}
+
+/* Commentary Container */
+#commentary-container {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+}
+
+.commentary-entry {
+    background: rgba(30, 30, 30, 0.8);
+    border-radius: 6px;
+    padding: 1em;
+    border-left: 3px solid #4caf50;
+}
+
+.commentary-entry.streaming {
+    border-left-color: #2196f3;
+}
+
+.commentary-entry.error {
+    border-left-color: #f44336;
+}
+
+.commentary-text {
+    color: #e0e0e0;
+    line-height: 1.6;
+    font-size: 1em;
+}
+
+/* Waiting on the model: dim the previous line rather than blanking the overlay
+   for the whole of time-to-first-token. */
+.commentary-text.awaiting {
+    opacity: 0.45;
+}
+
+.commentary-text p {
+    margin: 0 0 0.8em 0;
+}
+
+.commentary-text p:last-child {
+    margin-bottom: 0;
+}
+
+.placeholder-text {
+    color: #888;
+    font-style: italic;
+}
+
+.commentary-timestamp {
+    font-size: 0.75em;
+    color: #666;
+    margin-top: 0.5em;
+    padding-top: 0.5em;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Streaming cursor animation */
+.streaming-cursor {
+    display: inline-block;
+    width: 8px;
+    height: 1em;
+    background: #4caf50;
+    margin-left: 2px;
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+}
+
+/* History Container */
+#history-container {
+    border-top: 1px solid #333;
+    padding-top: 0.5em;
+}
+
+#history-container[hidden] {
+    display: none;
+}
+
+.history-header {
+    cursor: pointer;
+    padding: 0.5em;
+    color: #888;
+    font-size: 0.85em;
+    display: flex;
+    align-items: center;
+    gap: 0.3em;
+}
+
+.history-header:hover {
+    color: #ccc;
+}
+
+.history-toggle ms {
+    font-size: 1.2em;
+    transition: transform 0.2s;
+}
+
+.history-header.expanded .history-toggle ms {
+    transform: rotate(180deg);
+}
+
+.history-entries {
+    display: none;
+    flex-direction: column;
+    gap: 0.5em;
+    padding-top: 0.5em;
+}
+
+.history-header.expanded + .history-entries {
+    display: flex;
+}
+
+.history-entry {
+    background: rgba(20, 20, 20, 0.6);
+    border-radius: 4px;
+    padding: 0.8em;
+    border-left: 2px solid #555;
+    font-size: 0.9em;
+}
+
+.history-entry .commentary-text {
+    color: #aaa;
+}
+
+/* Error Toast */
+.error-toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #c62828;
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.error-toast[hidden] {
+    display: none;
+}
+
+.error-dismiss {
+    background: none;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    padding: 0;
+    opacity: 0.8;
+}
+
+.error-dismiss:hover {
+    opacity: 1;
+}
+
+/* Pause button state */
+#pause-btn.paused ms {
+    color: #ff9800;
+}
+
+#pause-btn.active ms {
+    color: #4caf50;
+}
+
+/* Copy button feedback */
+#copy-btn.copied {
+    background: rgba(76, 175, 80, 0.3);
+}
+
+/* ============================================================================
+   Settings Page Styles
+   ============================================================================ */
+
+/* Fixed titlebar for settings */
+body:not(.transparent-bg) #titlebar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #1a1a1a;
+}
+
+body:not(.transparent-bg) {
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* Tab Navigation */
+.tab-navigation {
+    display: flex;
+    background: #252525;
+    border-bottom: 1px solid #444;
+    padding: 0 0.5em;
+    position: sticky;
+    top: 40px;
+    z-index: 99;
+}
+
+.tab-btn {
+    padding: 0.6em 1em;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #aaa;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: all 0.2s;
+}
+
+.tab-btn:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.tab-btn.active {
+    color: #fff;
+    border-bottom-color: #4caf50;
+}
+
+.tab-panel {
+    display: none;
+}
+
+.tab-panel.active {
+    display: block;
+}
+
+/* Settings Content */
+.settings-content {
+    padding: 1em;
+    box-sizing: border-box;
+}
+
+.settings-section {
+    margin-bottom: 1.5em;
+    padding: 1em;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+}
+
+.settings-section h2 {
+    margin: 0 0 0.8em 0;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid #555;
+    font-size: 1.1em;
+}
+
+.settings-section h3 {
+    margin: 0.8em 0 0.5em 0;
+    font-size: 0.95em;
+    color: #aaa;
+}
+
+.settings-section form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6em;
+}
+
+.settings-section label {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+}
+
+.settings-section label key {
+    min-width: 160px;
+    color: #ccc;
+}
+
+.settings-section input[type="number"] {
+    width: calc(var(--size, 6) * 1ch + 2em);
+    padding: 0.3em 0.5em;
+    border: 1px solid #555;
+    border-radius: 3px;
+    background: #333;
+    color: #fff;
+}
+
+.settings-section input[type="range"] {
+    flex: 1;
+    max-width: 150px;
+}
+
+.settings-section select {
+    padding: 0.3em 0.5em;
+    border: 1px solid #555;
+    border-radius: 3px;
+    background: #333;
+    color: #fff;
+    flex: 1;
+    max-width: 300px;
+}
+
+.settings-section input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+}
+
+.settings-section input[type="color"] {
+    width: 50px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid #555;
+    border-radius: 3px;
+    background: #333;
+    cursor: pointer;
+}
+
+/* Custom color row - hidden by default when not needed */
+.custom-color-row {
+    display: none;
+}
+
+.help-text {
+    font-size: 0.85em;
+    color: #888;
+    margin: 0 0 1em 0;
+}
+
+/* API Key Row */
+.api-key-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+}
+
+.api-key-row input[type="password"],
+.api-key-row input[type="text"] {
+    flex: 1;
+    max-width: 300px;
+    padding: 0.4em 0.6em;
+    border: 1px solid #555;
+    border-radius: 3px;
+    background: #333;
+    color: #fff;
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
+.icon-btn {
+    background: #444;
+    border: none;
+    color: #aaa;
+    padding: 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon-btn:hover {
+    background: #555;
+    color: #fff;
+}
+
+/* API Actions */
+.api-actions {
+    display: flex;
+    align-items: center;
+    gap: 1em;
+    margin-top: 1em;
+}
+
+.api-actions button {
+    padding: 0.5em 1em;
+    border: none;
+    border-radius: 4px;
+    background: #2196f3;
+    color: #fff;
+    cursor: pointer;
+    font-size: 0.9em;
+}
+
+.api-actions button:hover {
+    background: #1976d2;
+}
+
+.api-actions button:disabled {
+    background: #555;
+    cursor: not-allowed;
+}
+
+#api-test-status {
+    font-size: 0.9em;
+}
+
+#api-test-status.success {
+    color: #4caf50;
+}
+
+#api-test-status.error {
+    color: #f44336;
+}
+
+#api-test-status.loading {
+    color: #aaa;
+}
+
+/* API Info */
+.api-info {
+    margin-top: 1em;
+    padding: 0.8em;
+    background: rgba(76, 175, 80, 0.1);
+    border: 1px solid rgba(76, 175, 80, 0.3);
+    border-radius: 4px;
+}
+
+.api-info-row {
+    display: flex;
+    padding: 4px 0;
+}
+
+.api-label {
+    min-width: 80px;
+    color: #888;
+    font-size: 0.9em;
+}
+
+.api-value {
+    color: #fff;
+    font-size: 0.9em;
+}
+
+.api-value.connected {
+    color: #4caf50;
+}
+
+/* Cost Info */
+.cost-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+}
+
+.cost-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+}
+
+.cost-label {
+    min-width: 100px;
+    color: #888;
+}
+
+.cost-value {
+    color: #fff;
+    font-weight: 500;
+}
+
+.secondary-btn {
+    padding: 0.4em 0.8em;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #444;
+    color: #fff;
+    cursor: pointer;
+    font-size: 0.85em;
+    margin-top: 0.5em;
+}
+
+.secondary-btn:hover {
+    background: #555;
+}
+
+/* Prompt Textareas */
+.prompt-group {
+    margin-bottom: 1em;
+}
+
+.prompt-label {
+    display: block;
+    margin-bottom: 0.4em;
+    color: #ccc;
+    font-size: 0.9em;
+}
+
+.prompt-group textarea {
+    width: 100%;
+    padding: 0.6em;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #333;
+    color: #fff;
+    font-family: inherit;
+    font-size: 0.9em;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.prompt-group textarea:focus {
+    outline: none;
+    border-color: #2196f3;
+}
+
+.prompt-help {
+    font-size: 0.8em;
+    color: #666;
+    margin-top: 0.3em;
+}
+
+.prompt-actions {
+    margin-top: 1em;
+}
+
+/* Custom prompts section - shown/hidden based on preset */
+.custom-prompts-section {
+    display: block;
+}
+
+.custom-prompts-section.hidden {
+    display: none;
+}
+
+/* Data Field Groups */
+.data-field-group {
+    margin-bottom: 1em;
+}
+
+.data-field-group h3 {
+    margin: 0 0 0.5em 0;
+    font-size: 0.9em;
+    color: #aaa;
+}
+
+.field-checkboxes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5em 1.5em;
+}
+
+.field-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    cursor: pointer;
+    font-size: 0.9em;
+    color: #ccc;
+}
+
+.field-checkbox input[type="checkbox"] {
+    cursor: pointer;
+}
+
+/* Help Content */
+.help-content {
+    padding: 1em;
+}
+
+.help-content ol,
+.help-content ul {
+    margin: 0 0 1em 0;
+    padding-left: 1.5em;
+    color: #ccc;
+    line-height: 1.6;
+}
+
+.help-content li {
+    margin-bottom: 0.5em;
+}
+
+.help-content a {
+    color: #64b5f6;
+    text-decoration: none;
+}
+
+.help-content a:hover {
+    text-decoration: underline;
+}
+
+.help-content strong {
+    color: #fff;
+}
+
+/* ============================================================================
+   Responsive Adjustments
+   ============================================================================ */
+
+@media (max-width: 600px) {
+    .tab-btn {
+        padding: 0.5em 0.6em;
+        font-size: 0.8em;
+    }
+
+    .settings-section label key {
+        min-width: 120px;
+    }
+
+    .field-checkboxes {
+        flex-direction: column;
+        gap: 0.4em;
+    }
+
+    #status-bar {
+        flex-direction: column;
+        gap: 0.3em;
+    }
+}

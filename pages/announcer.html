@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html data-settings-key="lunatic-announcer-settings-v1">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';"/>
+    <link rel="stylesheet" href="/pages/css/common.css"/>
+    <link rel="stylesheet" href="./css/announcer.css"/>
+</head>
+<body class="transparent-bg">
+    <div id="titlebar">
+        <header>
+            <div class="logo"><img src="./images/icon128.png"/></div>
+            <div class="title">Lunatic Announcer</div>
+            <div class="filler"></div>
+            <div class="buttons">
+                <div id="generate-btn" class="button" title="Generate commentary now"><ms>refresh</ms></div>
+                <div id="mute-btn" class="button" title="Speak commentary aloud"><ms>volume_off</ms></div>
+                <div id="pause-btn" class="button" title="Pause auto-updates"><ms>pause</ms></div>
+                <div id="copy-btn" class="button" title="Copy commentary to clipboard"><ms>content_copy</ms></div>
+                <a class="button open-settings" href="announcer-settings.html?width=700&height=600&child-window"
+                   title="Open settings window" target="lunatic-announcer-settings"><ms>settings</ms></a>
+                <div title="Close this window" class="button close electron-only"><ms>close</ms></div>
+            </div>
+        </header>
+    </div>
+
+    <div id="content">
+        <!-- Status bar -->
+        <div id="status-bar">
+            <div id="connection-status" class="status-item">
+                <span class="status-label">API:</span>
+                <span id="api-status" class="status-value not-configured">Not configured</span>
+            </div>
+            <div id="update-status" class="status-item">
+                <span class="status-label">Updates:</span>
+                <span id="auto-update-status" class="status-value">Paused</span>
+            </div>
+            <div id="cost-status" class="status-item">
+                <span class="status-label">Est. cost:</span>
+                <span id="session-cost" class="status-value">$0.00</span>
+            </div>
+        </div>
+
+        <!-- Commentary display area -->
+        <div id="commentary-container">
+            <div id="current-commentary" class="commentary-entry">
+                <div class="commentary-text">
+                    <p class="placeholder-text">Configure your Claude API key in settings (the <ms>settings</ms> gear above) to start receiving live race commentary.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Commentary history (collapsible) -->
+        <div id="history-container" hidden>
+            <div class="history-header">
+                <span class="history-toggle" title="Toggle history">
+                    <ms>expand_more</ms>
+                    <span>Previous Commentary</span>
+                </span>
+            </div>
+            <div id="history-entries" class="history-entries"></div>
+        </div>
+    </div>
+
+    <!-- Error toast -->
+    <div id="error-toast" class="error-toast" hidden>
+        <span class="error-message"></span>
+        <button class="error-dismiss"><ms>close</ms></button>
+    </div>
+
+    <script type="module">
+        import {lunaticAnnouncerMain} from './src/announcer.mjs';
+        lunaticAnnouncerMain();
+    </script>
+</body>
+</html>

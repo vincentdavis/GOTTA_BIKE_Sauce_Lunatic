@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate manifest.json
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          m = json.load(open('manifest.json'))
+          for f in ('manifest_version', 'name', 'description', 'version', 'web_root', 'windows'):
+              assert f in m, f'manifest.json missing required field: {f}'
+          assert m['manifest_version'] == 1, 'manifest_version must be 1'
+          assert m['windows'], 'no windows declared'
+          import os
+          for w in m['windows']:
+              for f in ('file', 'id', 'name'):
+                  assert f in w, f'window missing {f}'
+              assert os.path.isfile(w['file']), f"window file missing on disk: {w['file']}"
+          print('manifest OK:', m['name'], m['version'])
+          PY
+
+      - name: Syntax-check JS modules
+        run: for f in pages/src/*.mjs; do node --check "$f"; done
+
+      - name: Check referenced assets exist
+        run: |
+          python3 - <<'PY'
+          import re, os, sys, glob
+          missing = []
+          for html in glob.glob('pages/*.html'):
+              src = open(html).read()
+              for ref in re.findall(r'(?:src|href)="\./([^"]+)"', src):
+                  p = os.path.join('pages', ref.split('?')[0])
+                  if not os.path.isfile(p):
+                      missing.append(f'{html} -> {ref}')
+          if missing:
+              print('Missing local assets:'); [print(' ', m) for m in missing]; sys.exit(1)
+          print('all local asset references resolve')
+          PY
