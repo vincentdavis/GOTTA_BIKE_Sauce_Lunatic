@@ -43,6 +43,18 @@ jobs:
         # so a module under pages/src/providers/ would ship unchecked.
         run: find pages/src -name '*.mjs' -exec node --check {} \;
 
+      - name: Syntax-check the hosted service
+        # The service ships separately from the mod zip, but a syntax error
+        # here breaks a deploy rather than a download, which is worse.
+        run: |
+          if [ -d service/src ]; then
+            find service/src -name '*.mjs' -exec node --check {} \;
+            python3 -c "import json;json.load(open('service/package.json'));json.load(open('service/railway.json'))"
+            echo "service OK"
+          else
+            echo "no service/ directory — skipping"
+          fi
+
       - name: Check referenced assets exist
         run: |
           python3 - <<'PY'

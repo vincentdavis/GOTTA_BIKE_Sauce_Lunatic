@@ -1,0 +1,17 @@
+{
+    "name": "lunatic-announcer-service",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Hosted commentary endpoint for the GOTTA.BIKE Sauce Lunatic announcer. Speaks the OpenAI chat-completions API so the mod needs no new client adapter.",
+    "type": "module",
+    "engines": {
+        "node": ">=20"
+    },
+    "scripts": {
+        "start": "node src/index.mjs",
+        "dev": "node --watch src/index.mjs"
+    },
+    "dependencies": {
+        "redis": "^4.7.0"
+    }
+}
