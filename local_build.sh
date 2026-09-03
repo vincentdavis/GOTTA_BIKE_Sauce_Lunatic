@@ -24,7 +24,7 @@ echo "Version: $VERSION"
 
 # Fail fast on a broken manifest or a syntax error, rather than shipping it.
 python3 -c "import json;json.load(open('manifest.json'))"
-node --check pages/src/announcer.mjs
+find pages/src -name '*.mjs' -exec node --check {} \;
 
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"

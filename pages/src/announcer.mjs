@@ -1,4 +1,10 @@
 import * as common from '/pages/src/common.mjs';
+// Relative specifier: '/pages/src/...' is SAUCE CORE, not this mod, even
+// though the mod's own file sits at the same relative path on disk.
+import {
+    PROVIDERS, DEFAULT_PROVIDER, COMPATIBLE_PRESETS,
+    providerFor, presetFor, costFor, streamCompletion
+} from './providers.mjs';
 
 // Storage keys (global, shared across windows)
 const ATHLETE_DATA_KEY = '/gotta-bike-sauce-athlete-data';
@@ -7,8 +13,6 @@ const COMMENTARY_SETTINGS_KEY = '/gotta-bike-lunatic-settings';
 const COST_KEY = '/gotta-bike-lunatic-session-cost';
 const CALLS_KEY = '/gotta-bike-lunatic-total-calls';
 
-// Claude API endpoint
-const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 
 // Background color options
 const BACKGROUND_OPTIONS = {
@@ -83,32 +87,56 @@ Give me direct tactical advice - what should I do right now?`
     }
 };
 
-// Current Claude model IDs and standard token costs per 1K tokens (USD).
-// Verified against platform.claude.com docs on 2026-09-02.
-// NOTE: from the 4.6 generation on, model IDs are dateless and each dateless ID
-// is itself a pinned snapshot — do NOT append a date suffix (that 404s).
-// Haiku 4.5 is the fastest/cheapest and is the default for live commentary, but
-// it has the nearest retirement floor in the lineup (not sooner than 2026-10-15);
-// migrateModelSetting() below falls back automatically if it ever goes away.
-const DEFAULT_MODEL = 'claude-haiku-4-5-20251001';
-const TOKEN_COSTS = {
-    'claude-haiku-4-5-20251001': { input: 0.001, output: 0.005 },
-    'claude-sonnet-5': { input: 0.002, output: 0.010 },
-    'claude-opus-5': { input: 0.005, output: 0.025 }
-};
+// Model catalogs, request shapes and the streaming loop all live in
+// providers.mjs. Kept here only because several call sites still want a plain
+// default model id for the Anthropic path.
+const DEFAULT_MODEL = PROVIDERS.anthropic.defaultModel;
 
-// Sonnet 5 and Opus 5 run ADAPTIVE thinking when the `thinking` key is omitted
-// (Opus 5 changed this from 4.8/4.7, which stayed off). Thinking tokens are
-// billed against max_tokens -- 60 by default here and capped at 200 in the
-// settings form -- so the whole budget is spent inside the thinking block, no
-// text is ever emitted, and the stream ends empty. Disable it explicitly for
-// those models. Haiku 4.5 does not think unless asked, so it sends no key at
-// all; a model missing from this set simply keeps the default behaviour.
-const ADAPTIVE_THINKING_MODELS = new Set(['claude-sonnet-5', 'claude-opus-5']);
+// ============================================================================
+// Active provider
+// ============================================================================
+// Every "is the AI configured?" check goes through isProviderConfigured(). There
+// are seven such gates and one of them -- shouldFireNow() -- returns false with
+// no error and no toast, so a provider left half-configured produces an overlay
+// that is silently, permanently mute. Route them all through one helper.
 
-// With thinking disabled, Opus 5 occasionally leaks `<thinking>` tags into the
-// visible text. One line of system prompt is cheaper than stripping them out.
-const NO_INTERNAL_TAGS = 'Do not include internal or system XML tags in your response.';
+function activeProviderId() {
+    const id = common.settingsStore.get('aiProvider');
+    return PROVIDERS[id] ? id : DEFAULT_PROVIDER;
+}
+
+function activeProvider() {
+    return providerFor(activeProviderId());
+}
+
+function activeApiKey() {
+    return common.settingsStore.get(activeProvider().keySetting) || '';
+}
+
+function activeModel() {
+    const p = activeProvider();
+    return common.settingsStore.get(p.modelSetting) || p.defaultModel;
+}
+
+function activeBaseUrl() {
+    const p = activeProvider();
+    return p.baseUrlSetting ? (common.settingsStore.get(p.baseUrlSetting) || '') : '';
+}
+
+function activePresetId() {
+    return common.settingsStore.get('compatPreset') || 'openai';
+}
+
+/** Enough settings present to make a request at all. */
+function isProviderConfigured() {
+    return activeProvider().isConfigured(k => common.settingsStore.get(k));
+}
+
+/** Settings keys that change whether/where we can call a model. */
+const PROVIDER_SETTING_KEYS = [
+    'aiProvider', 'claudeApiKey', 'claudeModel',
+    'compatApiKey', 'compatModel', 'compatBaseUrl', 'compatPreset'
+];
 
 // State
 let storedAthleteData = {};
@@ -155,8 +183,17 @@ common.settingsStore.setDefault({
     maxRiders: 10,
     historyCount: 3,
     // API settings
+    aiProvider: DEFAULT_PROVIDER,
     claudeApiKey: '',
     claudeModel: DEFAULT_MODEL,
+    // OpenAI-compatible provider (OpenAI, Gemini, OpenRouter, Groq, Ollama, …)
+    compatPreset: 'openai',
+    compatBaseUrl: COMPATIBLE_PRESETS.openai.baseUrl,
+    compatApiKey: '',
+    compatModel: '',
+    // Optional USD per 1M tokens, so a free-text model can still be costed.
+    compatInputCost: '',
+    compatOutputCost: '',
     maxTokens: 60,
     // Prompt settings
     stylePreset: 'dramatic',
@@ -304,7 +341,7 @@ export async function lunaticAnnouncerMain() {
         // Fire one commentary as soon as real ride data first arrives instead
         // of waiting a full update interval.
         if (!firstDataFired && !isPaused && !isStreaming &&
-            common.settingsStore.get('claudeApiKey') &&
+            isProviderConfigured() &&
             nearbyData.some(r => !r.watching)) {
             firstDataFired = true;
             generateCommentary();
@@ -346,7 +383,8 @@ export async function lunaticAnnouncerMain() {
         if (changed.has('backgroundOption') || changed.has('customBackgroundColor')) {
             applyBackground();
         }
-        if (changed.has('claudeApiKey')) {
+        // Any provider setting can flip "configured" — not just the Claude key.
+        if (PROVIDER_SETTING_KEYS.some(k => changed.has(k))) {
             updateApiStatus();
         }
         if (changed.has('updateInterval')) {
@@ -378,7 +416,7 @@ export async function lunaticAnnouncerMain() {
 
     // Start auto-update if configured and API is ready, respecting the saved
     // pause state so we don't force-resume (and spend) on every window open.
-    if (common.settingsStore.get('claudeApiKey')) {
+    if (isProviderConfigured()) {
         const ph = document.querySelector('#current-commentary .placeholder-text');
         if (ph) ph.textContent = 'Waiting for ride data…';
         isPaused = common.settingsStore.get('commentaryPaused') ?? false;
@@ -394,10 +432,24 @@ export async function lunaticAnnouncerMain() {
  * Runs in both windows so the settings dropdown and the API caller agree.
  */
 function migrateModelSetting() {
-    const stored = common.settingsStore.get('claudeModel');
-    if (stored && !TOKEN_COSTS[stored]) {
-        console.warn(`[Lunatic] Unknown/retired model "${stored}" — falling back to ${DEFAULT_MODEL}`);
-        common.settingsStore.set('claudeModel', DEFAULT_MODEL);
+    // An unknown provider id — a downgrade after selecting one a later build
+    // added — would otherwise reach every call site as undefined.
+    const storedProvider = common.settingsStore.get('aiProvider');
+    if (storedProvider && !PROVIDERS[storedProvider]) {
+        console.warn(`[Lunatic] Unknown provider "${storedProvider}" — falling back to ${DEFAULT_PROVIDER}`);
+        common.settingsStore.set('aiProvider', DEFAULT_PROVIDER);
+    }
+
+    // Only a provider with a model catalog can validate its stored model, and
+    // it must fall back to ITS OWN default — never across providers, or a
+    // Google key ends up paired with a Claude model id and 404s every call.
+    for (const prov of Object.values(PROVIDERS)) {
+        if (!prov.models) continue;
+        const stored = common.settingsStore.get(prov.modelSetting);
+        if (stored && !prov.models[stored]) {
+            console.warn(`[Lunatic] Unknown/retired ${prov.label} model "${stored}" — falling back to ${prov.defaultModel}`);
+            common.settingsStore.set(prov.modelSetting, prov.defaultModel);
+        }
     }
 
     // setDefault() is a no-op once a value is stored, so existing users would
@@ -585,11 +637,11 @@ function updatePauseButton() {
 }
 
 function updateApiStatus() {
-    const apiKey = common.settingsStore.get('claudeApiKey');
+    const configured = isProviderConfigured();
     const statusEl = document.getElementById('api-status');
 
     if (statusEl) {
-        if (apiKey) {
+        if (configured) {
             statusEl.textContent = 'Configured';
             statusEl.classList.remove('not-configured', 'error');
             statusEl.classList.add('connected');
@@ -687,9 +739,8 @@ function hideError() {
 // ============================================================================
 
 async function generateCommentary(manual = false) {
-    const apiKey = common.settingsStore.get('claudeApiKey');
-    if (!apiKey) {
-        showError('Claude API key not configured');
+    if (!isProviderConfigured()) {
+        showError(`${activeProvider().label} is not configured — check the settings`);
         return;
     }
 
@@ -1217,7 +1268,7 @@ function buildStorylinesText() {
 /** Event-driven cadence: fire on what happened, not on a wall clock. */
 function shouldFireNow(now) {
     if (isPaused || isStreaming) return false;
-    if (!common.settingsStore.get('claudeApiKey')) return false;
+    if (!isProviderConfigured()) return false;
     if (!nearbyData.some(r => !r.watching)) return false;
     if (!common.settingsStore.get('eventDriven')) return false;
 
@@ -1332,164 +1383,87 @@ function flushSpokenSentences(full, spokenUpTo) {
 }
 
 async function callClaudeAPI(systemPrompt, userPrompt) {
-    const apiKey = common.settingsStore.get('claudeApiKey');
-    const model = common.settingsStore.get('claudeModel') || DEFAULT_MODEL;
+    const providerId = activeProviderId();
+    const model = activeModel();
     const maxTokens = common.settingsStore.get('maxTokens') || 60;
-    const thinkingOff = ADAPTIVE_THINKING_MODELS.has(model);
-    const systemText = thinkingOff ? `${systemPrompt}\n\n${NO_INTERNAL_TAGS}` : systemPrompt;
     const textEl = document.querySelector('#current-commentary .commentary-text');
 
-    // One attempt = one AbortController (an aborted controller can't be reused).
-    async function attempt() {
-        const ctrl = new AbortController();
-        activeAbort = ctrl;
-        let stallTimer = null;
-        // Stall timeout, not a total timeout: a slow-but-progressing stream is
-        // never killed, but a dead socket can't hang isStreaming forever.
-        const bump = ms => {
-            clearTimeout(stallTimer);
-            stallTimer = setTimeout(() => ctrl.abort(), ms);
-        };
+    // Reset per ATTEMPT, not per call: streamCompletion retries once on a
+    // transient failure, and a retry must rebuild the text node and re-speak
+    // from the start rather than append to a half-written line.
+    let node = null;
+    let spokenUpTo = 0;
 
-        let fullResponse = '';
-        let node = null;
-        let spokenUpTo = 0;
+    const result = await streamCompletion({
+        provider: providerId,
+        model,
+        apiKey: activeApiKey(),
+        baseUrl: activeBaseUrl(),
+        preset: activePresetId(),
+        systemPrompt,
+        userPrompt,
+        maxTokens,
 
-        try {
-            bump(15000); // headers / TTFT window
-            const response = await fetch(CLAUDE_API_URL, {
-                method: 'POST',
-                signal: ctrl.signal,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': apiKey,
-                    'anthropic-version': '2023-06-01',
-                    'anthropic-dangerous-direct-browser-access': 'true'
-                },
-                body: JSON.stringify({
-                    model: model,
-                    max_tokens: maxTokens,
-                    system: systemText,
-                    ...(thinkingOff ? { thinking: { type: 'disabled' } } : {}),
-                    messages: [{ role: 'user', content: userPrompt }],
-                    stream: true
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                const err = new Error(errorData.error?.message || `API error: ${response.status}`);
-                err.status = response.status;
-                err.retryAfter = Number(response.headers.get('retry-after')) || null;
-                throw err;
-            }
-
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
-            let inputTokens = 0;
-            let outputTokens = 0;
-
-            while (true) {
-                const { done, value } = await reader.read();
-                bump(8000);
-                if (done) break;
-
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-
-                for (const line of lines) {
-                    if (!line.startsWith('data: ')) continue;
-                    const data = line.slice(6);
-
-                    let parsed;
-                    try {
-                        parsed = JSON.parse(data);
-                    } catch (e) {
-                        continue; // incomplete/non-JSON chunk
-                    }
-
-                    // Anthropic streams mid-stream failures as an error event
-                    // (e.g. overloaded_error after a 200).
-                    if (parsed.type === 'error') {
-                        const err = new Error(parsed.error?.message || parsed.error?.type || 'Streaming error');
-                        err.midStream = true;
-                        err.overloaded = parsed.error?.type === 'overloaded_error';
-                        throw err;
-                    }
-
-                    if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-                        fullResponse += parsed.delta.text;
-                        if (textEl) {
-                            // Lazily swap to a text node on the FIRST delta, so
-                            // the previous line stays up through TTFT. Text nodes
-                            // cannot inject markup, so no escaping is needed here;
-                            // displayCommentary() does the single final parse.
-                            if (!node) {
-                                textEl.classList.remove('awaiting');
-                                textEl.textContent = '';
-                                node = document.createTextNode('');
-                                const cursor = document.createElement('span');
-                                cursor.className = 'streaming-cursor';
-                                textEl.append(node, cursor);
-                            }
-                            node.appendData(parsed.delta.text);
-                        }
-                        // Start speaking at the first complete sentence rather
-                        // than waiting for the whole response.
-                        spokenUpTo = flushSpokenSentences(fullResponse, spokenUpTo);
-                    }
-
-                    if (parsed.type === 'message_delta' && parsed.usage) {
-                        outputTokens = parsed.usage.output_tokens || 0;
-                    }
-                    if (parsed.type === 'message_start' && parsed.message?.usage) {
-                        inputTokens = parsed.message.usage.input_tokens || 0;
-                    }
-                }
-            }
-
-            if (!fullResponse.trim()) {
-                throw new Error('Empty response from Claude API');
-            }
-
-            // Speak any trailing fragment with no terminal punctuation.
-            const tail = fullResponse.slice(spokenUpTo).trim();
-            if (tail) speak(tail);
-
-            updateCost(model, inputTokens, outputTokens);
-            return fullResponse;
-
-        } finally {
-            clearTimeout(stallTimer);
+        onController: ctrl => {
+            activeAbort = ctrl;
+            node = null;
+            spokenUpTo = 0;
+        },
+        onSettled: ctrl => {
             if (activeAbort === ctrl) activeAbort = null;
-        }
-    }
+        },
 
-    try {
-        return await attempt();
-    } catch (err) {
-        // Retry once on transient failures, and only if nothing was shown yet —
-        // partial commentary beats re-blanking the overlay.
-        const transient = err.status === 429 || err.status >= 500 || err.overloaded;
-        const retryable = transient && !err.name?.includes('Abort');
-        if (!retryable) {
-            console.error('Claude API error:', err);
-            throw err;
+        onText: (chunk, full) => {
+            if (textEl) {
+                // Lazily swap to a text node on the FIRST delta, so the previous
+                // line stays up through TTFT. Text nodes cannot inject markup,
+                // so no escaping is needed here; displayCommentary() does the
+                // single final parse.
+                if (!node) {
+                    textEl.classList.remove('awaiting');
+                    textEl.textContent = '';
+                    node = document.createTextNode('');
+                    const cursor = document.createElement('span');
+                    cursor.className = 'streaming-cursor';
+                    textEl.append(node, cursor);
+                }
+                node.appendData(chunk);
+            }
+            // Start speaking at the first complete sentence rather than waiting
+            // for the whole response.
+            spokenUpTo = flushSpokenSentences(full, spokenUpTo);
         }
-        const waitMs = Math.min((err.retryAfter || 1) * 1000, 10000);
-        console.warn(`[Lunatic] transient API error, retrying in ${waitMs}ms:`, err.message);
-        await new Promise(r => setTimeout(r, waitMs));
-        return await attempt();
-    }
+    });
+
+    // Speak any trailing fragment with no terminal punctuation.
+    const tail = result.text.slice(spokenUpTo).trim();
+    if (tail) speak(tail);
+
+    updateCost(providerId, model, result.inputTokens, result.outputTokens);
+    return result.text;
 }
 
-function updateCost(model, inputTokens, outputTokens) {
-    const costs = TOKEN_COSTS[model] || TOKEN_COSTS[DEFAULT_MODEL];
-    const cost = (inputTokens / 1000 * costs.input) + (outputTokens / 1000 * costs.output);
+/** True when the active model has a price we can actually apply. */
+function currentCostIsTracked() {
+    const prov = activeProvider();
+    if (prov.models?.[activeModel()]) return true;
+    return Number(common.settingsStore.get('compatInputCost')) > 0 ||
+           Number(common.settingsStore.get('compatOutputCost')) > 0;
+}
 
-    sessionCost += cost;
+function updateCost(providerId, model, inputTokens, outputTokens) {
+    const { cost, known } = costFor({
+        providerId,
+        model,
+        inputTokens,
+        outputTokens,
+        userInputPer1M: common.settingsStore.get('compatInputCost'),
+        userOutputPer1M: common.settingsStore.get('compatOutputCost')
+    });
+
+    // An unpriced model contributes calls but not dollars. Quoting a local
+    // Ollama run at Haiku rates would be worse than admitting we don't know.
+    if (known) sessionCost += cost;
     totalCalls++;
 
     // Persist to shared (global) keys so the settings window sees the same
@@ -1505,11 +1479,18 @@ function updateCost(model, inputTokens, outputTokens) {
 function renderCost() {
     const cost = common.settingsStore.get(COST_KEY) || 0;
     const calls = common.settingsStore.get(CALLS_KEY) || 0;
-    const costStr = `$${cost < 1 ? cost.toFixed(4) : cost.toFixed(2)}`;
+    const tracked = currentCostIsTracked();
+    // The asterisk means "at least this" — some calls went to a model we have
+    // no price for, so the true figure is higher.
+    const costStr = `$${cost < 1 ? cost.toFixed(4) : cost.toFixed(2)}${tracked ? '' : '*'}`;
+    const note = tracked ? '' : 'The selected model has no known price — enter one in settings to track cost.';
 
     for (const id of ['session-cost', 'session-cost-display']) {
         const el = document.getElementById(id);
-        if (el) el.textContent = costStr;
+        if (el) {
+            el.textContent = costStr;
+            el.title = note;
+        }
     }
     const callsEl = document.getElementById('total-calls-display');
     if (callsEl) callsEl.textContent = String(calls);
@@ -1632,6 +1613,7 @@ export async function lunaticAnnouncerSettingsMain() {
 
     // Setup custom controls
     setupApiKeyToggle();
+    setupProviderControls();
     setupTestConnection();
     setupStylePreset();
     setupDataFields();
@@ -1676,11 +1658,13 @@ function setupTabs() {
     });
 }
 
-function setupApiKeyToggle() {
-    const toggleBtn = document.getElementById('toggle-key-visibility');
-    const keyInput = document.getElementById('claude-api-key');
+/** Show/hide toggle plus trim-on-save for one API key field. */
+function setupKeyField(toggleId, inputId, settingKey) {
+    const toggleBtn = document.getElementById(toggleId);
+    const keyInput = document.getElementById(inputId);
+    if (!keyInput) return;
 
-    if (toggleBtn && keyInput) {
+    if (toggleBtn) {
         toggleBtn.addEventListener('click', () => {
             const isPassword = keyInput.type === 'password';
             keyInput.type = isPassword ? 'text' : 'password';
@@ -1690,16 +1674,19 @@ function setupApiKeyToggle() {
                 icon.textContent = isPassword ? 'visibility_off' : 'visibility';
             }
         });
-
-        // Load current value
-        keyInput.value = common.settingsStore.get('claudeApiKey') || '';
-
-        // Save on change
-        keyInput.addEventListener('change', () => {
-            common.settingsStore.set('claudeApiKey', keyInput.value.trim());
-            updateApiInfo();
-        });
     }
+
+    keyInput.value = common.settingsStore.get(settingKey) || '';
+
+    keyInput.addEventListener('change', () => {
+        common.settingsStore.set(settingKey, keyInput.value.trim());
+        updateApiInfo();
+    });
+}
+
+function setupApiKeyToggle() {
+    setupKeyField('toggle-key-visibility', 'claude-api-key', 'claudeApiKey');
+    setupKeyField('toggle-compat-key-visibility', 'compat-api-key', 'compatApiKey');
 }
 
 async function setupTestConnection() {
@@ -1709,36 +1696,37 @@ async function setupTestConnection() {
     if (!testBtn) return;
 
     testBtn.addEventListener('click', async () => {
-        const apiKey = common.settingsStore.get('claudeApiKey');
-        if (!apiKey) {
-            statusEl.textContent = 'No API key configured';
+        if (!isProviderConfigured()) {
+            statusEl.textContent = `${activeProvider().label} is not configured`;
             statusEl.className = 'error';
             return;
         }
 
-        const testModel = common.settingsStore.get('claudeModel') || DEFAULT_MODEL;
+        const prov = activeProvider();
         testBtn.disabled = true;
         statusEl.textContent = 'Testing...';
         statusEl.className = 'loading';
 
         try {
-            const response = await fetch(CLAUDE_API_URL, {
+            // Built through the adapter, not hand-rolled: a second copy of the
+            // request shape drifts, and then the test passes for a model the
+            // overlay cannot actually use.
+            const req = prov.buildRequest({
+                model: activeModel(),
+                apiKey: activeApiKey(),
+                baseUrl: activeBaseUrl(),
+                preset: activePresetId(),
+                systemPrompt: 'Reply with OK.',
+                userPrompt: 'Say "OK"',
+                maxTokens: 16
+            });
+
+            const response = await fetch(req.url, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': apiKey,
-                    'anthropic-version': '2023-06-01',
-                    'anthropic-dangerous-direct-browser-access': 'true'
-                },
-                body: JSON.stringify({
-                    model: testModel,
-                    max_tokens: 10,
-                    // Match the overlay's request shape -- without this a
-                    // thinking model burns the 10 tokens on thought and the
-                    // test reports success for a model that never speaks.
-                    ...(ADAPTIVE_THINKING_MODELS.has(testModel) ? { thinking: { type: 'disabled' } } : {}),
-                    messages: [{ role: 'user', content: 'Say "OK"' }]
-                })
+                headers: req.headers,
+                // Non-streaming for the test: we only care that the request is
+                // accepted, and a stream would need the whole reader loop.
+                body: JSON.stringify({ ...req.body, stream: false, stream_options: undefined })
             });
 
             if (response.ok) {
@@ -1746,8 +1734,9 @@ async function setupTestConnection() {
                 statusEl.className = 'success';
                 updateApiInfo(true);
             } else {
-                const error = await response.json().catch(() => ({}));
-                statusEl.textContent = error.error?.message || `Error: ${response.status}`;
+                const body = await response.json().catch(() => ({}));
+                const info = prov.parseHttpError(response.status, body, response.headers);
+                statusEl.textContent = info.message;
                 statusEl.className = 'error';
             }
         } catch (err) {
@@ -1760,17 +1749,17 @@ async function setupTestConnection() {
 }
 
 function updateApiInfo(connected = false) {
-    const apiKey = common.settingsStore.get('claudeApiKey');
+    const configured = isProviderConfigured();
     const infoEl = document.getElementById('api-info');
     const statusText = document.getElementById('api-status-text');
     const modelText = document.getElementById('api-model-text');
 
     if (infoEl) {
-        infoEl.hidden = !apiKey;
+        infoEl.hidden = !configured;
     }
 
     if (statusText) {
-        if (apiKey) {
+        if (configured) {
             statusText.textContent = connected ? 'Connected' : 'Configured';
             statusText.classList.toggle('connected', connected);
         } else {
@@ -1779,8 +1768,58 @@ function updateApiInfo(connected = false) {
     }
 
     if (modelText) {
-        modelText.textContent = common.settingsStore.get('claudeModel') || DEFAULT_MODEL;
+        modelText.textContent = `${activeProvider().label} · ${activeModel() || '(no model set)'}`;
     }
+}
+
+/**
+ * Provider picker and the OpenAI-compatible fields.
+ *
+ * These live OUTSIDE initSettingsForm on purpose. That binder keys on the
+ * `name` attribute and loads stored values once at bind time, which suits a
+ * fixed form; the preset dropdown has to WRITE two other fields when it
+ * changes. setupStylePreset() already manages its controls the same way.
+ */
+function setupProviderControls() {
+    const providerSel = document.querySelector('select[name="aiProvider"]');
+    const presetSel = document.querySelector('select[name="compatPreset"]');
+    const baseUrlInput = document.querySelector('input[name="compatBaseUrl"]');
+    const hintEl = document.getElementById('compat-hint');
+
+    const applyVisibility = () => {
+        const id = activeProviderId();
+        for (const el of document.querySelectorAll('[data-provider]')) {
+            el.classList.toggle('hidden', el.dataset.provider !== id);
+        }
+        if (hintEl) hintEl.textContent = presetFor(activePresetId()).hint || '';
+        updateApiInfo();
+    };
+
+    if (providerSel) {
+        providerSel.value = activeProviderId();
+        providerSel.addEventListener('change', () => {
+            common.settingsStore.set('aiProvider', providerSel.value);
+            applyVisibility();
+        });
+    }
+
+    if (presetSel) {
+        presetSel.value = activePresetId();
+        presetSel.addEventListener('change', () => {
+            const id = presetSel.value;
+            common.settingsStore.set('compatPreset', id);
+            // Writing the base URL here is the whole point of a preset. 'custom'
+            // keeps whatever the user already typed.
+            const cfg = presetFor(id);
+            if (id !== 'custom') {
+                common.settingsStore.set('compatBaseUrl', cfg.baseUrl);
+                if (baseUrlInput) baseUrlInput.value = cfg.baseUrl;
+            }
+            applyVisibility();
+        });
+    }
+
+    applyVisibility();
 }
 
 function setupStylePreset() {

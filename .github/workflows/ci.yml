@@ -39,7 +39,9 @@ jobs:
           PY
 
       - name: Syntax-check JS modules
-        run: for f in pages/src/*.mjs; do node --check "$f"; done
+        # find, not a glob: `pages/src/*.mjs` does not match subdirectories,
+        # so a module under pages/src/providers/ would ship unchecked.
+        run: find pages/src -name '*.mjs' -exec node --check {} \;
 
       - name: Check referenced assets exist
         run: |

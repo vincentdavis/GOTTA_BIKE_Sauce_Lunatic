@@ -603,6 +603,14 @@ body:not(.transparent-bg) {
     display: none;
 }
 
+/* Provider-specific settings rows. setupProviderControls() toggles .hidden on
+   every [data-provider] element so only the active provider's fields show.
+   !important because the rows are <label>s that the settings stylesheet lays
+   out with its own display value. */
+[data-provider].hidden {
+    display: none !important;
+}
+
 /* Data Field Groups */
 .data-field-group {
     margin-bottom: 1em;
