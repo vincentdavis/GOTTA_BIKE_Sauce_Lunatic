@@ -29,6 +29,11 @@
 
 export const DEFAULT_PROVIDER = 'anthropic';
 
+// Leading slash: global across the Sauce origin, so the overlay and the
+// settings window share one device token rather than minting two.
+export const DEVICE_TOKEN_KEY = '/gotta-bike-lunatic-device-token';
+export const QUOTA_KEY = '/gotta-bike-lunatic-quota';
+
 // With thinking disabled, Opus 5 occasionally leaks `<thinking>` tags into the
 // visible text. One line of system prompt is cheaper than stripping them out.
 const NO_INTERNAL_TAGS = 'Do not include internal or system XML tags in your response.';
@@ -250,7 +255,82 @@ const compatible = {
     doneSentinel: '[DONE]'
 };
 
-export const PROVIDERS = { anthropic, compatible };
+/**
+ * The Lunatic hosted service.
+ *
+ * Deliberately a thin skin over the OpenAI-compatible adapter: the service
+ * speaks that API precisely so there is no fourth streaming code path here.
+ * What differs is onboarding, not protocol —
+ *
+ *   - no API key to paste. A device token is minted once from /v1/device and
+ *     kept in a GLOBAL settings key so both windows see the same one.
+ *   - the model is an ALIAS (free-fast, …) resolved server-side, so upstream
+ *     models can change without a new mod release.
+ *   - the announcer voice is chosen by `style` and rendered server-side. The
+ *     free tier ignores any system prompt we send, so we do not send one.
+ *   - the Zwift athlete id rides along as a rate-limit bucket that survives a
+ *     storage wipe. It is not a secret and the service treats it as a bucket
+ *     key only, never as proof of identity.
+ */
+const hosted = {
+    id: 'hosted',
+    label: 'Lunatic (hosted)',
+    keySetting: DEVICE_TOKEN_KEY,
+    modelSetting: 'hostedModel',
+    baseUrlSetting: 'hostedBaseUrl',
+    defaultModel: 'free-fast',
+    models: null,   // aliases are discovered from the service, and are free
+
+    isConfigured: get => !!(String(get('hostedBaseUrl') || '').trim() &&
+                            String(get(DEVICE_TOKEN_KEY) || '').trim()),
+
+    buildRequest({ model, apiKey, systemPrompt, userPrompt, maxTokens, baseUrl, extra = {} }) {
+        const root = String(baseUrl || '').trim().replace(/\/+$/, '');
+        const headers = {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`
+        };
+        // Only send it when we actually have one — an empty header is worse
+        // than none, since the service would bucket everyone under the same key.
+        if (extra.athleteId) headers['X-Lunatic-Athlete'] = String(extra.athleteId);
+
+        return {
+            url: `${root}/v1/chat/completions`,
+            headers,
+            body: {
+                model: model || 'free-fast',
+                style: extra.style || undefined,
+                // The system prompt is discarded server-side on the free tier.
+                // Sending the local one anyway would just inflate the payload
+                // against the service's prompt-size cap for no effect.
+                messages: [{ role: 'user', content: userPrompt }],
+                max_tokens: maxTokens,
+                stream: true
+            }
+        };
+    },
+
+    parseHttpError(status, body, headers) {
+        const code = body?.error?.code || '';
+        // Quota and budget refusals are the service working as designed, not
+        // transient failures — retrying spends the rider's remaining calls on
+        // an answer that cannot change.
+        const permanent = code === 'quota_exhausted' ||
+                          code === 'daily_budget_exhausted' ||
+                          code === 'invalid_token' ||
+                          code === 'prompt_too_large';
+        return {
+            message: body?.error?.message || `Service error: ${status}`,
+            retryAfter: Number(headers.get('retry-after')) || null,
+            retryable: !permanent && (status === 429 || status >= 500)
+        };
+    },
+
+    readEvent: p => compatible.readEvent(p),
+    doneSentinel: '[DONE]'
+};
+
+export const PROVIDERS = { anthropic, compatible, hosted };
 
 export function providerFor(id) {
     return PROVIDERS[id] || PROVIDERS[DEFAULT_PROVIDER];
@@ -301,9 +381,9 @@ export function costFor({ providerId, model, inputTokens, outputTokens, userInpu
  * @param onSettled   called with the controller when an attempt finishes
  */
 export async function streamCompletion({
-    provider, model, apiKey, baseUrl, preset,
+    provider, model, apiKey, baseUrl, preset, extra,
     systemPrompt, userPrompt, maxTokens,
-    onText, onController, onSettled
+    onText, onController, onSettled, onResponse
 }) {
     const adapter = providerFor(provider);
 
@@ -328,7 +408,7 @@ export async function streamCompletion({
             bump(15000); // headers / TTFT window
 
             const req = adapter.buildRequest({
-                model, apiKey, systemPrompt, userPrompt, maxTokens, baseUrl, preset
+                model, apiKey, systemPrompt, userPrompt, maxTokens, baseUrl, preset, extra
             });
 
             const response = await fetch(req.url, {
@@ -337,6 +417,10 @@ export async function streamCompletion({
                 headers: req.headers,   // verbatim — see THE HEADER RULE
                 body: JSON.stringify(req.body)
             });
+
+            // Response headers carry the hosted tier's remaining quota, which
+            // the overlay shows in place of a dollar figure.
+            onResponse?.(response);
 
             if (!response.ok) {
                 const body = await response.json().catch(() => ({}));

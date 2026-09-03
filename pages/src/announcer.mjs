@@ -2,7 +2,7 @@ import * as common from '/pages/src/common.mjs';
 // Relative specifier: '/pages/src/...' is SAUCE CORE, not this mod, even
 // though the mod's own file sits at the same relative path on disk.
 import {
-    PROVIDERS, DEFAULT_PROVIDER, COMPATIBLE_PRESETS,
+    PROVIDERS, DEFAULT_PROVIDER, COMPATIBLE_PRESETS, DEVICE_TOKEN_KEY, QUOTA_KEY,
     providerFor, presetFor, costFor, streamCompletion
 } from './providers.mjs';
 
@@ -135,7 +135,8 @@ function isProviderConfigured() {
 /** Settings keys that change whether/where we can call a model. */
 const PROVIDER_SETTING_KEYS = [
     'aiProvider', 'claudeApiKey', 'claudeModel',
-    'compatApiKey', 'compatModel', 'compatBaseUrl', 'compatPreset'
+    'compatApiKey', 'compatModel', 'compatBaseUrl', 'compatPreset',
+    'hostedBaseUrl', 'hostedModel', 'hostedStyle', DEVICE_TOKEN_KEY
 ];
 
 // State
@@ -194,6 +195,11 @@ common.settingsStore.setDefault({
     // Optional USD per 1M tokens, so a free-text model can still be costed.
     compatInputCost: '',
     compatOutputCost: '',
+    // Lunatic hosted service. The base URL is per-deployment, so there is no
+    // sensible default to ship — the user pastes their own.
+    hostedBaseUrl: '',
+    hostedModel: 'free-fast',
+    hostedStyle: 'tour',
     maxTokens: 60,
     // Prompt settings
     stylePreset: 'dramatic',
@@ -403,6 +409,8 @@ export async function lunaticAnnouncerMain() {
     common.settingsStore.addEventListener('set', ev => {
         if (ev.data.key === ATHLETE_DATA_KEY) {
             storedAthleteData = ev.data.value || {};
+        } else if (ev.data.key === QUOTA_KEY) {
+            renderCost();
         } else if (ev.data.key === COST_KEY || ev.data.key === CALLS_KEY) {
             // Keep the in-memory accumulator in sync with cross-window changes
             // (e.g. a reset triggered from the settings window).
@@ -1404,6 +1412,21 @@ async function callClaudeAPI(systemPrompt, userPrompt) {
         userPrompt,
         maxTokens,
 
+        // Only the hosted adapter reads these; the others ignore the object.
+        extra: {
+            style: common.settingsStore.get('hostedStyle') || 'tour',
+            athleteId: watchingAthlete?.athleteId ?? null
+        },
+
+        onResponse: response => {
+            // The hosted tier bills in calls, not dollars, so the overlay shows
+            // the allowance the service reports rather than a price.
+            const left = response.headers.get('X-Lunatic-Quota-Remaining');
+            if (left !== null && left !== '') {
+                common.settingsStore.set(QUOTA_KEY, Number(left));
+            }
+        },
+
         onController: ctrl => {
             activeAbort = ctrl;
             node = null;
@@ -1477,8 +1500,26 @@ function updateCost(providerId, model, inputTokens, outputTokens) {
 // current window (main window: #session-cost; settings window: #session-cost-display
 // and #total-calls-display).
 function renderCost() {
-    const cost = common.settingsStore.get(COST_KEY) || 0;
     const calls = common.settingsStore.get(CALLS_KEY) || 0;
+
+    // On the hosted tier there is no per-token price to show; what the rider
+    // actually wants to know is how many calls are left.
+    if (activeProviderId() === 'hosted') {
+        const left = common.settingsStore.get(QUOTA_KEY);
+        const label = (left === null || left === undefined) ? '—' : `${left} left`;
+        for (const id of ['session-cost', 'session-cost-display']) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.textContent = label;
+                el.title = 'Free calls remaining this month on the hosted service.';
+            }
+        }
+        const callsEl = document.getElementById('total-calls-display');
+        if (callsEl) callsEl.textContent = String(calls);
+        return;
+    }
+
+    const cost = common.settingsStore.get(COST_KEY) || 0;
     const tracked = currentCostIsTracked();
     // The asterisk means "at least this" — some calls went to a model we have
     // no price for, so the true figure is higher.
@@ -1614,6 +1655,7 @@ export async function lunaticAnnouncerSettingsMain() {
     // Setup custom controls
     setupApiKeyToggle();
     setupProviderControls();
+    setupHostedControls();
     setupTestConnection();
     setupStylePreset();
     setupDataFields();
@@ -1789,7 +1831,10 @@ function setupProviderControls() {
     const applyVisibility = () => {
         const id = activeProviderId();
         for (const el of document.querySelectorAll('[data-provider]')) {
-            el.classList.toggle('hidden', el.dataset.provider !== id);
+            // Space-separated, so a row shared by two providers (the Test
+            // Connection button) does not need a duplicate element.
+            const owners = el.dataset.provider.split(/\s+/);
+            el.classList.toggle('hidden', !owners.includes(id));
         }
         if (hintEl) hintEl.textContent = presetFor(activePresetId()).hint || '';
         updateApiInfo();
@@ -1820,6 +1865,129 @@ function setupProviderControls() {
     }
 
     applyVisibility();
+}
+
+/**
+ * The Lunatic hosted service.
+ *
+ * The model and style dropdowns are filled from the service, so they are
+ * managed entirely OUTSIDE initSettingsForm and carry no `name` attribute.
+ * That binder loads values once at bind time; options that arrive later from a
+ * fetch would leave the stored value unselected -- the ordering hazard already
+ * documented above migrateModelSetting().
+ */
+function setupHostedControls() {
+    const connectBtn = document.getElementById('hosted-connect-btn');
+    const statusEl = document.getElementById('hosted-status');
+    const quotaEl = document.getElementById('hosted-quota');
+    const modelSel = document.getElementById('hosted-model');
+    const styleSel = document.getElementById('hosted-style');
+    const baseInput = document.querySelector('input[name="hostedBaseUrl"]');
+
+    if (!connectBtn && !modelSel) return;   // not the settings window
+
+    const setStatus = (text, cls = '') => {
+        if (statusEl) {
+            statusEl.textContent = text;
+            statusEl.className = cls;
+        }
+    };
+
+    const serviceUrl = () => {
+        const raw = (baseInput?.value ?? common.settingsStore.get('hostedBaseUrl') ?? '').trim();
+        return raw.replace(/\/+$/, '');
+    };
+
+    const fill = (sel, items, storedKey, fallback) => {
+        if (!sel) return;
+        sel.textContent = '';
+        for (const it of items) {
+            const opt = document.createElement('option');
+            opt.value = it.id;
+            // textContent, not innerHTML: these strings come off the network.
+            opt.textContent = it.description ? `${it.label} — ${it.description}` : it.label;
+            sel.append(opt);
+        }
+        const stored = common.settingsStore.get(storedKey) || fallback;
+        if (items.some(i => i.id === stored)) sel.value = stored;
+        else if (items.length) {
+            // The stored choice is gone from the service -- move to a real one
+            // rather than leaving a select whose value matches no option.
+            sel.value = items[0].id;
+            common.settingsStore.set(storedKey, items[0].id);
+        }
+    };
+
+    async function getJson(path, options) {
+        const url = serviceUrl();
+        if (!url) throw new Error('Enter the service URL first');
+        const res = await fetch(`${url}${path}`, options);
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body?.error?.message || `Service error ${res.status}`);
+        return body;
+    }
+
+    const authHeader = () => ({
+        Authorization: `Bearer ${common.settingsStore.get(DEVICE_TOKEN_KEY) || ''}`
+    });
+
+    /** Pull the model list, the voices, and the remaining allowance. */
+    async function refresh() {
+        const [models, styles] = await Promise.all([
+            getJson('/v1/models'),
+            getJson('/v1/styles')
+        ]);
+        fill(modelSel, (models.data || []).map(m => ({
+            id: m.id, label: m.label || m.id, description: m.description
+        })), 'hostedModel', 'free-fast');
+        fill(styleSel, styles.data || [], 'hostedStyle', styles.default || 'tour');
+
+        const quota = await getJson('/v1/quota', { headers: authHeader() });
+        common.settingsStore.set(QUOTA_KEY, quota.remaining);
+        if (quotaEl) {
+            quotaEl.textContent = `${quota.remaining} of ${quota.limit} free calls left this month`;
+        }
+        return quota;
+    }
+
+    connectBtn?.addEventListener('click', async () => {
+        connectBtn.disabled = true;
+        setStatus('Connecting…', 'loading');
+        try {
+            if (baseInput) common.settingsStore.set('hostedBaseUrl', serviceUrl());
+
+            // Reuse an existing token. Minting a fresh one on every click would
+            // look like a way to reset the allowance, and the service buckets on
+            // the Zwift athlete id anyway, so it would only lose continuity.
+            if (!common.settingsStore.get(DEVICE_TOKEN_KEY)) {
+                const { token } = await getJson('/v1/device', { method: 'POST' });
+                if (!token) throw new Error('The service did not return a token');
+                common.settingsStore.set(DEVICE_TOKEN_KEY, token);
+            }
+
+            await refresh();
+            setStatus('Connected', 'success');
+            updateApiInfo(true);
+        } catch (err) {
+            setStatus(err.message || 'Could not reach the service', 'error');
+        } finally {
+            connectBtn.disabled = false;
+        }
+    });
+
+    modelSel?.addEventListener('change', () => {
+        common.settingsStore.set('hostedModel', modelSel.value);
+        updateApiInfo();
+    });
+    styleSel?.addEventListener('change', () => {
+        common.settingsStore.set('hostedStyle', styleSel.value);
+    });
+
+    // Already set up? Refresh quietly on open so the allowance is current.
+    if (activeProviderId() === 'hosted' && isProviderConfigured()) {
+        refresh().then(() => setStatus('Connected', 'success'))
+                 .catch(err => setStatus(err.message || 'Service unreachable', 'error'));
+    }
 }
 
 function setupStylePreset() {

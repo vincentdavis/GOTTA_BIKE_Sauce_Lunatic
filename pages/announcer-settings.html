@@ -148,9 +148,29 @@
                     <label>
                         <key>Provider:</key>
                         <select name="aiProvider">
+                            <option value="hosted">Lunatic hosted (free, no key)</option>
                             <option value="anthropic">Anthropic (Claude)</option>
                             <option value="compatible">OpenAI-compatible</option>
                         </select>
+                    </label>
+
+                    <!-- Lunatic hosted service: no API key, a monthly free allowance -->
+                    <label data-provider="hosted">
+                        <key>Service URL:</key>
+                        <input type="text" name="hostedBaseUrl"
+                               placeholder="https://your-app.up.railway.app" style="--size: 34"/>
+                    </label>
+
+                    <!-- No name attribute on purpose: these are filled from the
+                         service after the form has already bound. -->
+                    <label data-provider="hosted">
+                        <key>Model:</key>
+                        <select id="hosted-model"><option value="free-fast">Fast</option></select>
+                    </label>
+
+                    <label data-provider="hosted">
+                        <key>Voice:</key>
+                        <select id="hosted-style"><option value="tour">Tour de France</option></select>
                     </label>
 
                     <!-- Anthropic -->
@@ -219,7 +239,21 @@
                 <p class="help-text" data-provider="compatible" id="compat-hint"></p>
                 <p class="help-text" data-provider="compatible">Model IDs are free text because they change faster than this mod ships &mdash; paste whatever your service currently offers. The cost fields are optional and only drive the spend readout; leave them blank and cost shows as untracked.</p>
 
-                <div class="api-actions">
+                <div class="api-actions" data-provider="hosted">
+                    <button type="button" id="hosted-connect-btn">Connect</button>
+                    <span id="hosted-status"></span>
+                </div>
+
+                <p class="help-text" data-provider="hosted">
+                    <span id="hosted-quota"></span>
+                </p>
+
+                <p class="help-text" data-provider="hosted">The free tier provides the announcer
+                    voices above &mdash; your own prompts from the Prompts tab are not used. No API
+                    key is needed and nothing is billed to you. Rider data, including the names and
+                    power of riders around you, is sent to the service.</p>
+
+                <div class="api-actions" data-provider="anthropic compatible">
                     <button type="button" id="test-api-btn">Test Connection</button>
                     <span id="api-test-status"></span>
                 </div>
