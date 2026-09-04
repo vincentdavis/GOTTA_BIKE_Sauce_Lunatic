@@ -19,14 +19,21 @@ pages/announcer-settings.html  settings (Settings/API/Prompts/Data/Help tabs)
 pages/src/announcer.mjs    all logic (~1900 lines)
 pages/css/announcer.css    styles
 pages/images/logo.svg      source of truth for the logo; PNGs are rendered from it
-scripts/settings-boot-test.mjs  runs the settings window against a stub DOM
+scripts/lib/stub-dom.mjs   a DOM + Sauce `common` small enough to boot the mod in Node
+scripts/settings-boot-test.mjs  boots the settings window
+scripts/overlay-boot-test.mjs   boots the overlay, incl. the ~1Hz nearby handler
 ```
 
-Run `node scripts/settings-boot-test.mjs` after touching `announcer.mjs`. It is the
-only thing that *executes* the mod's UI code — `node --check` passes happily on a
-settings window that throws the instant it opens, which is how v0.4.0 shipped with
-every provider's fields (API key included) visible at once. CI and `local_build.sh`
-both run it.
+Run **both** boot tests after touching `announcer.mjs`. They are the only things
+that *execute* the mod's UI code — `node --check` passes happily on a window that
+throws the instant it opens, which is how v0.4.0 shipped with every provider's
+fields (API key included) visible at once. Separate processes, because
+`announcer.mjs` holds module-level state and migrates at import. CI and
+`local_build.sh` run both.
+
+The stub `settingsStore` really dispatches `changed` and `set`, so a test can drive
+the live-update paths the way the settings window does — which is how the overlay's
+stale cost readout was found.
 
 Both HTML files import the same module and call different entry points:
 `lunaticAnnouncerMain()` and `lunaticAnnouncerSettingsMain()`.

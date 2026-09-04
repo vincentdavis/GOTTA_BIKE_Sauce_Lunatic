@@ -393,6 +393,12 @@ export async function lunaticAnnouncerMain() {
         // Any provider setting can flip "configured" — not just the Claude key.
         if (PROVIDER_SETTING_KEYS.some(k => changed.has(k))) {
             updateApiStatus();
+            // The cost readout is provider-shaped: the hosted service shows an
+            // allowance, everything else a dollar figure. Without this it keeps
+            // the OLD provider's reading until the next call happens to write a
+            // counter — showing a spend total while on the free tier, or "free
+            // calls left" while burning the rider's own key.
+            renderCost();
         }
         if (changed.has('updateInterval')) {
             restartAutoUpdate();

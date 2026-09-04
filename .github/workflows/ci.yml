@@ -43,11 +43,14 @@ jobs:
         # so a module under pages/src/providers/ would ship unchecked.
         run: find pages/src -name '*.mjs' -exec node --check {} \;
 
-      - name: Boot the settings window
+      - name: Boot both windows
         # A syntax check cannot see a ReferenceError inside a function that only
         # runs in a browser -- which is exactly how a broken settings window
-        # shipped once. This runs the real entry point against a stub DOM.
-        run: node scripts/settings-boot-test.mjs
+        # shipped once. These run the real entry points against a stub DOM.
+        # Separate processes: announcer.mjs holds module-level state.
+        run: |
+          node scripts/settings-boot-test.mjs
+          node scripts/overlay-boot-test.mjs
 
       - name: Syntax-check the hosted service
         # The service ships separately from the mod zip, but a syntax error
