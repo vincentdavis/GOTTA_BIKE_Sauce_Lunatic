@@ -26,7 +26,7 @@
 
     <div class="tab-navigation">
         <button type="button" class="tab-btn active" data-tab="settings-tab">Settings</button>
-        <button type="button" class="tab-btn" data-tab="api-tab">Claude API</button>
+        <button type="button" class="tab-btn" data-tab="api-tab">AI Provider</button>
         <button type="button" class="tab-btn" data-tab="prompts-tab">Prompts</button>
         <button type="button" class="tab-btn" data-tab="data-tab">Data Fields</button>
         <button type="button" class="tab-btn" data-tab="help-tab">Help</button>
@@ -137,7 +137,7 @@
         </div>
     </div>
 
-    <!-- Claude API Tab -->
+    <!-- AI Provider Tab -->
     <div id="api-tab" class="tab-panel">
         <div class="settings-content">
             <section class="settings-section">
@@ -477,35 +477,51 @@
         <div class="help-content">
             <section class="settings-section">
                 <h2>Getting Started</h2>
+                <p>Pick one of three ways to get commentary, on the <strong>AI Provider</strong> tab.</p>
                 <ol>
-                    <li><strong>Get an API key:</strong> Sign up at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> and create an API key.</li>
-                    <li><strong>Enter your key:</strong> Go to the Claude API tab and paste your API key.</li>
-                    <li><strong>Test connection:</strong> Click "Test Connection" to verify your key works.</li>
-                    <li><strong>Choose a style:</strong> Select a commentary style preset or create your own.</li>
-                    <li><strong>Start riding:</strong> The commentary will automatically update during your ride.</li>
+                    <li><strong>Lunatic hosted &mdash; no API key.</strong> Paste the service URL, click
+                        Connect, and pick a model and a voice. A monthly allowance of free calls, nothing
+                        billed to you. Your own prompts from the Prompts tab are not used on this option.</li>
+                    <li><strong>Anthropic.</strong> Sign up at
+                        <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>,
+                        create a key, paste it, and choose a model. Usage is billed to your account.</li>
+                    <li><strong>OpenAI-compatible.</strong> Works with OpenAI, Google Gemini, OpenRouter,
+                        Groq and a local Ollama. Choose the service, paste a key, and enter a model id.
+                        Model ids are free text because they change often &mdash; paste whatever your
+                        service currently offers.</li>
                 </ol>
+                <p>Then click <strong>Test Connection</strong> (or Connect), choose a style on the Prompts
+                tab, and ride. The commentary fires on what happens on the road, not on a timer.</p>
             </section>
 
             <section class="settings-section">
                 <h2>Commentary Styles</h2>
                 <ul>
-                    <li><strong>Professional:</strong> Concise tactical analysis focusing on power data and race positioning.</li>
-                    <li><strong>Casual:</strong> Friendly commentary using cycling slang and community terms.</li>
-                    <li><strong>Dramatic:</strong> Exciting play-by-play that builds tension and highlights key moments.</li>
-                    <li><strong>Tactical Coach:</strong> Direct advice on when to attack, who to watch, and how to respond.</li>
-                    <li><strong>Custom:</strong> Write your own system and user prompts for fully customized commentary.</li>
+                    <li><strong>Tour de France:</strong> A television race call. One punchy line as things
+                        happen on the road.</li>
+                    <li><strong>Tactical Coach:</strong> Direct advice on when to attack, who to watch, and
+                        how to respond.</li>
+                    <li><strong>Custom:</strong> Write your own system and user prompts. Not available on the
+                        hosted provider, which supplies its own voices.</li>
                 </ul>
+                <p>On the hosted provider the voice is chosen on the AI Provider tab instead, and the
+                selection here is ignored.</p>
             </section>
 
             <section class="settings-section">
                 <h2>Cost Information</h2>
-                <p>Claude API pricing (approximate, per 1K tokens):</p>
+                <p>On the <strong>hosted</strong> provider you pay nothing &mdash; the readout shows free
+                calls remaining instead of a price.</p>
+                <p><strong>Anthropic</strong> pricing, per 1K tokens:</p>
                 <ul>
-                    <li><strong>Haiku 4.5:</strong> ~$0.001 per 1K input tokens, ~$0.005 per 1K output tokens</li>
-                    <li><strong>Sonnet 5:</strong> ~$0.002 per 1K input tokens, ~$0.010 per 1K output tokens</li>
-                    <li><strong>Opus 5:</strong> ~$0.005 per 1K input tokens, ~$0.025 per 1K output tokens</li>
+                    <li><strong>Haiku 4.5:</strong> ~$0.001 input, ~$0.005 output</li>
+                    <li><strong>Sonnet 5:</strong> ~$0.002 input, ~$0.010 output</li>
+                    <li><strong>Opus 5:</strong> ~$0.005 input, ~$0.025 output</li>
                 </ul>
-                <p>A typical commentary request uses ~500-1000 tokens. With Haiku at 60-second intervals, expect costs around $0.15-0.35 per hour of racing.</p>
+                <p>A request sends about 1,000 tokens and gets back about 60. On Haiku that is roughly
+                $0.0013 a call, or $0.10&ndash;0.39 per hour of racing depending on how eventful it is.</p>
+                <p>For an <strong>OpenAI-compatible</strong> service the mod has no price list, so the cost
+                readout shows an asterisk until you enter the per-million rates on the AI Provider tab.</p>
             </section>
 
             <section class="settings-section">
