@@ -99,6 +99,20 @@ export const MAX_PROMPT_CHARS = num('MAX_PROMPT_CHARS', 16000);
 /** Free calls per identity per rolling month. ~150 is about one racing hour. */
 export const FREE_CALLS_PER_MONTH = num('FREE_CALLS_PER_MONTH', 150);
 
+/**
+ * Allowance for a signed-in Discord account. Deliberately larger than the
+ * anonymous one: signing in has to be worth doing, and an account is an
+ * identity that cannot be reset by clearing storage — which is exactly what an
+ * anonymous device token can do. The extra allowance is cheap and buys a real,
+ * de-duplicated user count.
+ */
+export const ACCOUNT_CALLS_PER_MONTH = num('ACCOUNT_CALLS_PER_MONTH', 400);
+
+export function callsAllowedFor(tier) {
+    if (tier === 'free' || tier === 'paid') return ACCOUNT_CALLS_PER_MONTH;
+    return FREE_CALLS_PER_MONTH;
+}
+
 /** Short-window burst cap, mirroring the mod's own 8-per-60s spend cap. */
 export const BURST_CALLS = num('BURST_CALLS', 10);
 export const BURST_WINDOW_SEC = num('BURST_WINDOW_SEC', 60);
@@ -126,8 +140,7 @@ export const COST_PER_1M = {
 export const REDIS_URL = str('REDIS_URL');
 
 /**
- * Accounts are not built yet. When they are, it is Discord OAuth: these are
- * read here so deployment config can land before the code does, and so
+ * Discord OAuth. All three must be set for sign-in to be offered at all;
  * `hasAccounts()` is the single switch the rest of the service asks.
  */
 export const DISCORD_CLIENT_ID = str('DISCORD_CLIENT_ID');
@@ -136,6 +149,25 @@ export const DISCORD_REDIRECT_URI = str('DISCORD_REDIRECT_URI');
 
 export function hasAccounts() {
     return !!(DISCORD_CLIENT_ID && DISCORD_CLIENT_SECRET && DISCORD_REDIRECT_URI);
+}
+
+/**
+ * Public origin, used to build the sign-in link the mod opens in a browser.
+ *
+ * Derived from the registered redirect URI rather than configured separately —
+ * Discord requires that URI to match exactly, so it is already the one value
+ * guaranteed to be correct. PUBLIC_URL overrides it if the service is ever
+ * fronted by a different hostname.
+ */
+export function publicUrl() {
+    const explicit = str('PUBLIC_URL');
+    if (explicit) return explicit.replace(/\/+$/, '');
+    if (DISCORD_REDIRECT_URI) {
+        try {
+            return new URL(DISCORD_REDIRECT_URI).origin;
+        } catch { /* fall through */ }
+    }
+    return '';
 }
 
 /** Signing secret for device tokens. Generated per-boot if unset. */

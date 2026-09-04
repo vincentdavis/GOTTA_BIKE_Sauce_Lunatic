@@ -25,6 +25,7 @@
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { TOKEN_SECRET } from './config.mjs';
+import { accountForKey, looksLikeAccountKey } from './accounts.mjs';
 
 // A per-boot secret is fine for anonymous device tokens: the worst case on
 // restart is that clients re-mint. Set TOKEN_SECRET to keep them stable across
@@ -79,16 +80,38 @@ function clientIp(req) {
 /**
  * Resolve the caller.
  *
- * Returns {kind, id, bucket, canUseCustomPrompt}. `bucket` is what quota
+ * Returns {kind, id, bucket, tier, canUseCustomPrompt}. `bucket` is what quota
  * counting keys on; `id` is the durable identity.
+ *
+ * Async because an account key needs a lookup. A device token stays stateless.
  */
-export function identify(req) {
+export async function identify(req) {
     const auth = req.headers['authorization'] || '';
     const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
 
+    // A signed-in account. Its bucket is the Discord id, which no amount of
+    // clearing local storage can reset -- the whole point of having accounts.
+    if (looksLikeAccountKey(token)) {
+        const account = await accountForKey(token);
+        if (!account) {
+            return { kind: 'anonymous', id: null, bucket: null, tier: 'anon', canUseCustomPrompt: false };
+        }
+        return {
+            kind: 'account',
+            id: account.discordId,
+            label: account.username,
+            bucket: `u:${account.discordId}`,
+            tier: account.tier || 'free',
+            ip: clientIp(req),
+            // Custom prompts are the paid tier's differentiator. A free
+            // account still gets the service's own voices.
+            canUseCustomPrompt: account.tier === 'paid'
+        };
+    }
+
     const deviceId = verifyDeviceToken(token);
     if (!deviceId) {
-        return { kind: 'anonymous', id: null, bucket: null, canUseCustomPrompt: false };
+        return { kind: 'anonymous', id: null, bucket: null, tier: 'anon', canUseCustomPrompt: false };
     }
 
     // The athlete id does not reset when storage is cleared, so it is the
@@ -101,6 +124,7 @@ export function identify(req) {
         kind: 'device',
         id: deviceId,
         bucket: athleteBucket || `d:${deviceId}`,
+        tier: 'anon',
         ip: clientIp(req),
         // Free tier: the service supplies the announcer voice. See styles.mjs
         // for why this is the enforcement point.

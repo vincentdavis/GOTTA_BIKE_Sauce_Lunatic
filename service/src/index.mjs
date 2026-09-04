@@ -19,14 +19,28 @@ import { randomUUID } from 'node:crypto';
 
 import {
     PORT, ALLOWED_ORIGIN, DEFAULT_ALIAS, MAX_OUTPUT_TOKENS, MAX_PROMPT_CHARS,
-    DAILY_BUDGET_USD, availableAliases, resolveAlias, hasAccounts
+    DAILY_BUDGET_USD, availableAliases, resolveAlias, hasAccounts, publicUrl
 } from './config.mjs';
 import { identify, mintDeviceToken } from './auth.mjs';
-import { initStorage, admit, quotaFor, recordSpend, spentToday, storageIsDurable } from './quota.mjs';
+import { initStorage, storageIsDurable } from './store.mjs';
+import { admit, quotaFor, recordSpend, spentToday } from './quota.mjs';
+import {
+    startPairing, pollPairing, discordAuthorizeUrl, handleDiscordCallback,
+    successPage, errorPage
+} from './discord.mjs';
 import { styleFor, listStyles, DEFAULT_STYLE } from './styles.mjs';
 import { callUpstream, UpstreamError } from './upstream.mjs';
 
 const MAX_BODY_BYTES = 256 * 1024;
+
+function accountsUnavailableReason() {
+    if (!hasAccounts()) {
+        return 'Discord sign-in is not configured on this service. ' +
+               'The anonymous Connect button works without an account.';
+    }
+    return 'Discord sign-in is unavailable because this service has no durable storage. ' +
+           'The anonymous Connect button works without an account.';
+}
 
 function corsHeaders() {
     return {
@@ -83,7 +97,7 @@ function readBody(req) {
 // ---------------------------------------------------------------------------
 
 async function handleChat(req, res, body) {
-    const ident = identify(req);
+    const ident = await identify(req);
     if (ident.kind === 'anonymous') {
         return apiError(res, 401,
             'Missing or invalid token. Call POST /v1/device once to get one.',
@@ -130,7 +144,7 @@ async function handleChat(req, res, body) {
 
     // Counted before the call, not after: an abandoned or failed stream still
     // burned upstream tokens.
-    const gate = await admit(ident.bucket);
+    const gate = await admit(ident.bucket, ident.tier);
     if (!gate.ok) {
         const extra = gate.retryAfter ? { 'Retry-After': String(gate.retryAfter) } : {};
         return apiError(res, gate.status, gate.message, gate.code, extra);
@@ -279,7 +293,12 @@ const server = createServer(async (req, res) => {
                 durableStorage: storageIsDurable(),
                 budget: { spentTodayUsd: Number(spend.toFixed(4)), dailyLimitUsd: DAILY_BUDGET_USD },
                 models: availableAliases().map(a => a.id),
-                accounts: hasAccounts() ? 'configured' : 'not-configured'
+                accounts: !hasAccounts() ? 'not-configured'
+                    : storageIsDurable() ? 'ready'
+                    : 'blocked-no-durable-storage',
+                // Surfaced because a Discord redirect_uri mismatch is otherwise
+                // diagnosed only by reading Discord's error page.
+                publicUrl: publicUrl() || null
             });
         }
 
@@ -309,11 +328,68 @@ const server = createServer(async (req, res) => {
         }
 
         if (req.method === 'GET' && path === '/v1/quota') {
-            const ident = identify(req);
+            const ident = await identify(req);
             if (ident.kind === 'anonymous') {
                 return apiError(res, 401, 'Missing or invalid token.', 'invalid_token');
             }
-            return json(res, 200, await quotaFor(ident.bucket));
+            const q = await quotaFor(ident.bucket, ident.tier);
+            return json(res, 200, {
+                ...q,
+                tier: ident.tier,
+                account: ident.kind === 'account' ? { name: ident.label } : null
+            });
+        }
+
+        // --- Discord sign-in -------------------------------------------------
+        // Every one of these refuses without durable storage. Losing a quota
+        // counter on redeploy is annoying; losing an ACCOUNT means a rider's
+        // key stops working and there is nothing they can do about it.
+        const accountsReady = hasAccounts() && storageIsDurable();
+
+        if (path === '/v1/pair/start' && req.method === 'POST') {
+            if (!accountsReady) {
+                return apiError(res, 503, accountsUnavailableReason(), 'accounts_unavailable');
+            }
+            const { code, pollToken, verifyUrl, expiresIn } = await startPairing();
+            return json(res, 200, { code, pollToken, verifyUrl, expiresIn });
+        }
+
+        if (path === '/v1/pair/poll' && (req.method === 'POST' || req.method === 'GET')) {
+            if (!accountsReady) {
+                return apiError(res, 503, accountsUnavailableReason(), 'accounts_unavailable');
+            }
+            const body = req.method === 'POST' ? await readBody(req) : {};
+            const token = body.pollToken || url.searchParams.get('token') || '';
+            return json(res, 200, await pollPairing(token));
+        }
+
+        if (path === '/auth/discord/start' && req.method === 'GET') {
+            if (!accountsReady) {
+                res.writeHead(503, { 'Content-Type': 'text/html; charset=utf-8' });
+                return res.end(errorPage(accountsUnavailableReason()));
+            }
+            const target = await discordAuthorizeUrl(url.searchParams.get('code'));
+            res.writeHead(302, { Location: target, ...corsHeaders() });
+            return res.end();
+        }
+
+        if (path === '/auth/discord/callback' && req.method === 'GET') {
+            if (!accountsReady) {
+                res.writeHead(503, { 'Content-Type': 'text/html; charset=utf-8' });
+                return res.end(errorPage(accountsUnavailableReason()));
+            }
+            try {
+                const result = await handleDiscordCallback({
+                    code: url.searchParams.get('code'),
+                    state: url.searchParams.get('state')
+                });
+                res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+                return res.end(successPage(result));
+            } catch (err) {
+                console.error('[discord] callback failed:', err.message);
+                res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+                return res.end(errorPage(err.message || 'Sign-in failed.'));
+            }
         }
 
         if (req.method === 'POST' && path === '/v1/chat/completions') {

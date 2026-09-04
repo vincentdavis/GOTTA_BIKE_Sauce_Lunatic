@@ -158,6 +158,7 @@
                     <label data-provider="hosted">
                         <key>Service URL:</key>
                         <input type="text" name="hostedBaseUrl"
+                               value="https://gottabikesaucelunatic-production.up.railway.app"
                                placeholder="https://your-app.up.railway.app" style="--size: 34"/>
                     </label>
 
@@ -240,13 +241,24 @@
                 <p class="help-text" data-provider="compatible">Model IDs are free text because they change faster than this mod ships &mdash; paste whatever your service currently offers. The cost fields are optional and only drive the spend readout; leave them blank and cost shows as untracked.</p>
 
                 <div class="api-actions" data-provider="hosted">
-                    <button type="button" id="hosted-connect-btn">Connect</button>
+                    <button type="button" id="hosted-signin-btn">Sign in with Discord</button>
+                    <button type="button" id="hosted-connect-btn">Connect anonymously</button>
                     <span id="hosted-status"></span>
                 </div>
 
                 <p class="help-text" data-provider="hosted">
+                    <a id="hosted-signin-link" href="#" target="_blank" rel="noopener" hidden></a>
+                </p>
+
+                <p class="help-text" data-provider="hosted">
+                    <span id="hosted-account"></span><br>
                     <span id="hosted-quota"></span>
                 </p>
+
+                <p class="help-text" data-provider="hosted">Signing in with Discord gives you a bigger
+                    monthly allowance and a key that survives a reinstall &mdash; sign in again anywhere
+                    and you get the same one back. Connecting anonymously works without an account, but
+                    the allowance is smaller and clearing your settings loses it.</p>
 
                 <p class="help-text" data-provider="hosted">The free tier provides the announcer
                     voices above &mdash; your own prompts from the Prompts tab are not used. No API

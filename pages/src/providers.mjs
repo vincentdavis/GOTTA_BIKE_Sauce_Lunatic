@@ -33,6 +33,10 @@ export const DEFAULT_PROVIDER = 'anthropic';
 // settings window share one device token rather than minting two.
 export const DEVICE_TOKEN_KEY = '/gotta-bike-lunatic-device-token';
 export const QUOTA_KEY = '/gotta-bike-lunatic-quota';
+// Display only — who the bearer token belongs to, when it came from a sign-in
+// rather than the anonymous Connect button. The token itself lives in
+// DEVICE_TOKEN_KEY either way, so nothing in the request path branches on this.
+export const ACCOUNT_KEY = '/gotta-bike-lunatic-account';
 
 // With thinking disabled, Opus 5 occasionally leaks `<thinking>` tags into the
 // visible text. One line of system prompt is cheaper than stripping them out.

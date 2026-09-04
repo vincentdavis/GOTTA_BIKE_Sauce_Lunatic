@@ -67,6 +67,19 @@ if (health.budget) {
     fail('spend breaker configured', 'no budget in /healthz');
 }
 
+// Accounts are optional, but a half-configured state is worth naming: the
+// button appears in the mod and then fails.
+if (health.accounts === 'ready') {
+    pass('discord sign-in', 'configured and storage is durable');
+} else if (health.accounts === 'blocked-no-durable-storage') {
+    fail('discord sign-in', 'CONFIGURED BUT BLOCKED — no Redis, so accounts would be ' +
+                            'lost on the next deploy. Sign-in returns 503 until that is fixed.');
+} else {
+    warn('discord sign-in', 'not configured — riders can only connect anonymously');
+}
+
+if (health.publicUrl) pass('public url', health.publicUrl);
+
 // --- models ----------------------------------------------------------------
 const { body: models } = await get('/v1/models');
 const aliases = (models.data || []).map(m => m.id);

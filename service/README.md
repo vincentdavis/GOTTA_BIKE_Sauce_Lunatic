@@ -11,9 +11,10 @@ upstream model can change without shipping a new mod.
 
 ## Status
 
-Free tier only. Three model aliases, three announcer voices, no custom
-prompting. Accounts (Discord OAuth) and paid licences are **not built yet**;
-`auth.mjs` is shaped so they slot in without touching anything below it.
+Free tier. Three model aliases, three announcer voices, no custom prompting.
+**Sign in with Discord** works and issues a durable key with a larger
+allowance. Paid licences are not built yet; the `tier` field on an account and
+`canUseCustomPrompt` are the seams they attach to.
 
 ## Deploy to Railway
 
@@ -43,6 +44,10 @@ prompting. Accounts (Discord OAuth) and paid licences are **not built yet**;
 | | |
 |---|---|
 | `POST /v1/device` | Mint an anonymous device token. Called once, stored in mod settings. |
+| `POST /v1/pair/start` | Begin a Discord sign-in. Returns a public `code`, a secret `pollToken`, and the URL to open. |
+| `POST /v1/pair/poll` | Collect the key once the browser sign-in completes. Single use. |
+| `GET /auth/discord/start` | Redirects to Discord. This is the URL the mod opens in a browser. |
+| `GET /auth/discord/callback` | Discord's redirect target. Creates or finds the account and shows the key. |
 | `GET /v1/models` | The aliases that are actually usable (model id **and** key present). |
 | `GET /v1/styles` | The announcer voices this service provides. |
 | `GET /v1/quota` | Remaining allowance, without spending a call. |
@@ -96,8 +101,35 @@ Quota buckets prefer the **Zwift athlete id** when the client sends one, because
 it survives a storage wipe. It is not a secret and anyone can claim any value,
 so it is used only as a rate-limit bucket, never as proof of identity.
 
-When accounts land, an identity simply becomes `{kind:'discord', id}` with a
-higher quota and permission to send its own system prompt.
+## Sign in with Discord
+
+An account is created by signing in and holds a long-lived key the mod sends as
+a bearer token — the same header an anonymous device token uses, so nothing
+downstream of `auth.mjs` branches on which it got.
+
+**Why a rider would bother:** the key survives a reinstall or a cleared settings
+bag (sign in again anywhere and you get the *same* key back), the monthly
+allowance is larger, and it is what a paid tier will attach to. For the
+operator it is a real, de-duplicated user count and an identity that cannot be
+reset by clearing storage.
+
+**Re-signing in returns the existing key.** Minting a new one per login would
+silently reset the user's quota and hand a fresh allowance to anyone who logs
+out and back in — exactly what accounts are meant to prevent.
+
+**The pairing flow.** The overlay cannot receive an OAuth redirect, and copying
+a long key out of a browser is the friction the hosted tier exists to remove.
+So: the mod calls `/v1/pair/start` for a public `code` and a secret
+`pollToken`, opens `/auth/discord/start?code=…` in the browser, and polls. The
+two values are separate on purpose — the code travels through a redirect chain
+and is treated as public; the poll token never leaves the mod, so only the
+client that began the flow can collect the key. The success page still shows
+the key in full, so a rider whose poll failed can finish by hand.
+
+**Sign-in refuses without durable storage.** Losing a quota counter on redeploy
+is annoying; losing an account means a rider's key stops working with no
+recourse. `/healthz` reports `accounts: ready`, `not-configured`, or
+`blocked-no-durable-storage`.
 
 ## Cost controls
 
@@ -143,8 +175,8 @@ only when `REDIS_URL` is set.
 
 ## Not done yet
 
-- **Discord OAuth and paid licences.** The `{kind, id}` identity shape and the
-  `canUseCustomPrompt` flag are the seams they attach to.
+- **Paid licences.** An account already carries a `tier`, and `paid` unlocks
+  `canUseCustomPrompt` in `auth.mjs`. Nothing sells or grants it yet.
 - **A verified run inside Sauce.** The client wiring is done — the mod has a
   `hosted` provider with a Connect button, model and voice pickers filled from
   `/v1/models` and `/v1/styles`, and a quota readout — and it has been driven

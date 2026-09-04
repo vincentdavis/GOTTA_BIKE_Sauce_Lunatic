@@ -2,7 +2,7 @@ import * as common from '/pages/src/common.mjs';
 // Relative specifier: '/pages/src/...' is SAUCE CORE, not this mod, even
 // though the mod's own file sits at the same relative path on disk.
 import {
-    PROVIDERS, DEFAULT_PROVIDER, COMPATIBLE_PRESETS, DEVICE_TOKEN_KEY, QUOTA_KEY,
+    PROVIDERS, DEFAULT_PROVIDER, COMPATIBLE_PRESETS, DEVICE_TOKEN_KEY, QUOTA_KEY, ACCOUNT_KEY,
     providerFor, presetFor, costFor, streamCompletion
 } from './providers.mjs';
 
@@ -1883,6 +1883,10 @@ function setupHostedControls() {
     const modelSel = document.getElementById('hosted-model');
     const styleSel = document.getElementById('hosted-style');
     const baseInput = document.querySelector('input[name="hostedBaseUrl"]');
+    const signInBtn = document.getElementById('hosted-signin-btn');
+    const linkEl = document.getElementById('hosted-signin-link');
+    const acctEl = document.getElementById('hosted-account');
+    let signingIn = false;
 
     if (!connectBtn && !modelSel) return;   // not the settings window
 
@@ -1947,8 +1951,74 @@ function setupHostedControls() {
         if (quotaEl) {
             quotaEl.textContent = `${quota.remaining} of ${quota.limit} free calls left this month`;
         }
+        if (acctEl) {
+            // The service is the authority on who the key belongs to; the
+            // stored label is only a fallback for an offline settings window.
+            const stored = common.settingsStore.get(ACCOUNT_KEY);
+            const name = quota.account?.name || stored?.name || '';
+            acctEl.textContent = name ? `Signed in as ${name}` : 'Not signed in — using an anonymous device token';
+        }
         return quota;
     }
+
+    /**
+     * Sign in with Discord, using the service's pairing flow.
+     *
+     * The overlay cannot receive an OAuth redirect, so the browser does the
+     * sign-in and the mod polls for the result. The service issues a public
+     * `code` for the URL and a secret `pollToken` that never leaves here, so
+     * only this client can collect the key.
+     */
+    async function signIn() {
+        const start = await getJson('/v1/pair/start', { method: 'POST' });
+        if (!start?.verifyUrl || !start?.pollToken) throw new Error('The service did not start a sign-in');
+
+        // Show the link before opening it: if the popup is blocked or opens
+        // somewhere unhelpful, the rider still has something to click.
+        if (linkEl) {
+            linkEl.textContent = 'Open the sign-in page';
+            linkEl.href = start.verifyUrl;
+            linkEl.hidden = false;
+        }
+        try { window.open(start.verifyUrl, '_blank'); } catch (e) { /* link is the fallback */ }
+
+        const deadline = Date.now() + Math.min(Number(start.expiresIn) || 900, 900) * 1000;
+        while (Date.now() < deadline) {
+            await new Promise(r => setTimeout(r, 2000));
+            const res = await getJson('/v1/pair/poll', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pollToken: start.pollToken })
+            });
+            if (res.status === 'complete') return res;
+            if (res.status !== 'pending') {
+                throw new Error('That sign-in link expired. Try again.');
+            }
+        }
+        throw new Error('Timed out waiting for the sign-in to finish.');
+    }
+
+    signInBtn?.addEventListener('click', async () => {
+        if (signingIn) return;              // one flow at a time
+        signingIn = true;
+        signInBtn.disabled = true;
+        setStatus('Waiting for Discord…', 'loading');
+        try {
+            if (baseInput) common.settingsStore.set('hostedBaseUrl', serviceUrl());
+            const { key, account } = await signIn();
+            common.settingsStore.set(DEVICE_TOKEN_KEY, key);
+            common.settingsStore.set(ACCOUNT_KEY, { name: account?.username || 'Discord user' });
+            if (linkEl) linkEl.hidden = true;
+            await refresh();
+            setStatus(`Signed in as ${account?.username || 'Discord user'}`, 'success');
+            updateApiInfo(true);
+        } catch (err) {
+            setStatus(err.message || 'Sign-in failed', 'error');
+        } finally {
+            signingIn = false;
+            signInBtn.disabled = false;
+        }
+    });
 
     connectBtn?.addEventListener('click', async () => {
         connectBtn.disabled = true;
