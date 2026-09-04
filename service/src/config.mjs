@@ -42,30 +42,50 @@ export const ALLOWED_ORIGIN = str('ALLOWED_ORIGIN', '*');
 // so a half-configured deployment degrades to fewer models rather than to
 // runtime 404s the user cannot diagnose.
 
+/**
+ * Resolve an alias's key: its own variable first, then a shared per-provider
+ * one. Running all three aliases on Anthropic is a normal setup, and without
+ * the provider-aware fallback it would mean pasting the same secret into three
+ * variables. `fallbackVar` stays as the slot's historical default for the
+ * non-Anthropic case.
+ */
+function keyFor(prefix, provider, fallbackVar) {
+    return str(`${prefix}_API_KEY`) ||
+        (provider === 'anthropic' ? str('ANTHROPIC_API_KEY') : str(fallbackVar));
+}
+
+const FAST_PROVIDER = str('FAST_PROVIDER', 'anthropic');
+const BALANCED_PROVIDER = str('BALANCED_PROVIDER', 'openai');
+const COLOUR_PROVIDER = str('COLOUR_PROVIDER', 'openai');
+
+// Base URLs default to the provider each slot was originally aimed at. Point a
+// slot at Anthropic and you must BLANK its base URL, or the request is built
+// for the wrong API. An Anthropic-provider slot ignores it either way, but the
+// blank keeps the config honest about where the call goes.
 export const MODEL_ALIASES = {
     'free-fast': {
         label: 'Fast',
         description: 'Lowest latency. The commentary starts talking soonest.',
-        provider: str('FAST_PROVIDER', 'anthropic'),
+        provider: FAST_PROVIDER,
         model: str('FAST_MODEL', 'claude-haiku-4-5-20251001'),
         baseUrl: str('FAST_BASE_URL'),
-        apiKey: str('FAST_API_KEY') || str('ANTHROPIC_API_KEY')
+        apiKey: keyFor('FAST', FAST_PROVIDER, 'ANTHROPIC_API_KEY')
     },
     'free-balanced': {
         label: 'Balanced',
         description: 'A better turn of phrase, at slightly higher latency.',
-        provider: str('BALANCED_PROVIDER', 'openai'),
+        provider: BALANCED_PROVIDER,
         model: str('BALANCED_MODEL'),
-        baseUrl: str('BALANCED_BASE_URL', 'https://api.openai.com/v1'),
-        apiKey: str('BALANCED_API_KEY') || str('OPENAI_API_KEY')
+        baseUrl: BALANCED_PROVIDER === 'anthropic' ? '' : str('BALANCED_BASE_URL', 'https://api.openai.com/v1'),
+        apiKey: keyFor('BALANCED', BALANCED_PROVIDER, 'OPENAI_API_KEY')
     },
     'free-colour': {
         label: 'Colour',
         description: 'The most characterful of the three. Slowest to first word.',
-        provider: str('COLOUR_PROVIDER', 'openai'),
+        provider: COLOUR_PROVIDER,
         model: str('COLOUR_MODEL'),
-        baseUrl: str('COLOUR_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta/openai'),
-        apiKey: str('COLOUR_API_KEY') || str('GOOGLE_API_KEY')
+        baseUrl: COLOUR_PROVIDER === 'anthropic' ? '' : str('COLOUR_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta/openai'),
+        apiKey: keyFor('COLOUR', COLOUR_PROVIDER, 'GOOGLE_API_KEY')
     }
 };
 
