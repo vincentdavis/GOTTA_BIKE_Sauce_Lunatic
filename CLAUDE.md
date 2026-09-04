@@ -19,7 +19,14 @@ pages/announcer-settings.html  settings (Settings/API/Prompts/Data/Help tabs)
 pages/src/announcer.mjs    all logic (~1900 lines)
 pages/css/announcer.css    styles
 pages/images/logo.svg      source of truth for the logo; PNGs are rendered from it
+scripts/settings-boot-test.mjs  runs the settings window against a stub DOM
 ```
+
+Run `node scripts/settings-boot-test.mjs` after touching `announcer.mjs`. It is the
+only thing that *executes* the mod's UI code — `node --check` passes happily on a
+settings window that throws the instant it opens, which is how v0.4.0 shipped with
+every provider's fields (API key included) visible at once. CI and `local_build.sh`
+both run it.
 
 Both HTML files import the same module and call different entry points:
 `lunaticAnnouncerMain()` and `lunaticAnnouncerSettingsMain()`.
@@ -39,6 +46,10 @@ Both HTML files import the same module and call different entry points:
 - `stats.hr.max` is the session-observed max (starts at 0), **not** the rider's
   ceiling. Use stored `maxHR` or `athlete.maxHeartRate`.
 - `state.speed` is already km/h. `state.grade` is a ratio, not a percent.
+- Helpers shared by `setupProviderControls()` and `setupHostedControls()` belong at
+  **module** scope. Both halves of the settings page touch the same connection row,
+  and a helper closing over one function's `const` elements is a `ReferenceError`
+  that aborts the whole setup — silently, since nothing else in the page notices.
 - Settings bags are namespaced by window-**instance** id, not by
   `data-settings-key`. A different mod can never see another's bag via
   `settingsStore` — only a raw `localStorage` scan can (see `migrateLegacySettings`).

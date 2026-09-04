@@ -1812,6 +1812,49 @@ function updateApiInfo(connected = false) {
 }
 
 /**
+ * One place that decides what the connection row says and which buttons are
+ * offered. Three states, and the difference between them matters: an anonymous
+ * token is lost when settings are cleared, a Discord one is not.
+ *
+ * Module scope on purpose. Both halves of the settings page need it -- the
+ * provider picker, which reveals the row, and the hosted controls, which change
+ * what it says -- and they are separate functions. Elements are looked up per
+ * call rather than closed over, so it is also safe from the overlay window,
+ * where none of them exist.
+ */
+function renderConnection() {
+    const badgeEl = document.getElementById('hosted-conn-badge');
+    const connTextEl = document.getElementById('hosted-conn-text');
+    const signInBtn = document.getElementById('hosted-signin-btn');
+    const connectBtn = document.getElementById('hosted-connect-btn');
+    const signOutBtn = document.getElementById('hosted-signout-btn');
+    const quotaEl = document.getElementById('hosted-quota');
+
+    const kind = tokenKind(common.settingsStore.get(DEVICE_TOKEN_KEY));
+    const name = common.settingsStore.get(ACCOUNT_KEY)?.name;
+
+    if (badgeEl) {
+        badgeEl.textContent = { discord: 'Discord', anon: 'Anonymous', none: 'Not connected' }[kind];
+        badgeEl.className = `conn-badge ${kind}`;
+    }
+    if (connTextEl) {
+        connTextEl.textContent = {
+            discord: name ? `Signed in as ${name}` : 'Signed in with Discord',
+            anon: 'No account — clearing your settings will lose this connection',
+            none: 'Sign in with Discord, or connect anonymously to try it'
+        }[kind];
+    }
+
+    // Offer the anonymous button only when it is an upgrade or a start — never
+    // as a way to downgrade an account you are already signed into.
+    if (signInBtn) signInBtn.hidden = kind === 'discord';
+    if (connectBtn) connectBtn.hidden = kind !== 'none';
+    if (signOutBtn) signOutBtn.hidden = kind === 'none';
+
+    if (quotaEl && kind === 'none') quotaEl.textContent = '';
+}
+
+/**
  * Provider picker and the OpenAI-compatible fields.
  *
  * These live OUTSIDE initSettingsForm on purpose. That binder keys on the
@@ -1824,48 +1867,6 @@ function setupProviderControls() {
     const presetSel = document.querySelector('select[name="compatPreset"]');
     const baseUrlInput = document.querySelector('input[name="compatBaseUrl"]');
     const hintEl = document.getElementById('compat-hint');
-
-    /**
-     * One place that decides what the connection row says and which buttons
-     * are offered. Three states, and the difference between them matters: an
-     * anonymous token is lost when settings are cleared, a Discord one is not.
-     */
-    function renderConnection() {
-        const kind = tokenKind(common.settingsStore.get(DEVICE_TOKEN_KEY));
-        const name = common.settingsStore.get(ACCOUNT_KEY)?.name;
-
-        if (badgeEl) {
-            badgeEl.textContent = { discord: 'Discord', anon: 'Anonymous', none: 'Not connected' }[kind];
-            badgeEl.className = `conn-badge ${kind}`;
-        }
-        if (connTextEl) {
-            connTextEl.textContent = {
-                discord: name ? `Signed in as ${name}` : 'Signed in with Discord',
-                anon: 'No account — clearing your settings will lose this connection',
-                none: 'Sign in with Discord, or connect anonymously to try it'
-            }[kind];
-        }
-
-        // Offer the anonymous button only when it is an upgrade or a start —
-        // never as a way to downgrade an account you are already signed into.
-        if (signInBtn) signInBtn.hidden = kind === 'discord';
-        if (connectBtn) connectBtn.hidden = kind !== 'none';
-        if (signOutBtn) signOutBtn.hidden = kind === 'none';
-
-        if (quotaEl && kind === 'none') quotaEl.textContent = '';
-    }
-
-    signOutBtn?.addEventListener('click', () => {
-        // Local only. The account and its key live on server; signing in again
-        // returns the same one, so this cannot orphan an allowance.
-        common.settingsStore.set(DEVICE_TOKEN_KEY, '');
-        common.settingsStore.set(ACCOUNT_KEY, null);
-        common.settingsStore.set(QUOTA_KEY, null);
-        setStatus('Signed out', '');
-        if (linkEl) linkEl.hidden = true;
-        renderConnection();
-        updateApiInfo();
-    });
 
     const applyVisibility = () => {
         const id = activeProviderId();
@@ -1938,6 +1939,18 @@ function setupHostedControls() {
             statusEl.className = cls;
         }
     };
+
+    signOutBtn?.addEventListener('click', () => {
+        // Local only. The account and its key live on the server; signing in
+        // again returns the same one, so this cannot orphan an allowance.
+        common.settingsStore.set(DEVICE_TOKEN_KEY, '');
+        common.settingsStore.set(ACCOUNT_KEY, null);
+        common.settingsStore.set(QUOTA_KEY, null);
+        setStatus('Signed out', '');
+        if (linkEl) linkEl.hidden = true;
+        renderConnection();
+        updateApiInfo();
+    });
 
     const serviceUrl = () => {
         const raw = (baseInput?.value ?? common.settingsStore.get('hostedBaseUrl') ?? '').trim();

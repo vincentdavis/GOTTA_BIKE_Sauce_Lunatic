@@ -25,6 +25,9 @@ echo "Version: $VERSION"
 # Fail fast on a broken manifest or a syntax error, rather than shipping it.
 python3 -c "import json;json.load(open('manifest.json'))"
 find pages/src -name '*.mjs' -exec node --check {} \;
+# A syntax check passes on a settings window that throws the moment it opens,
+# so actually boot it before installing anything.
+node scripts/settings-boot-test.mjs > /dev/null
 
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
