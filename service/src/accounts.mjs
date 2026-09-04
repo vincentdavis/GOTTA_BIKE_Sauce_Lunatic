@@ -22,6 +22,7 @@
 
 import { randomBytes } from 'node:crypto';
 import { getJson, setJson } from './store.mjs';
+import { DISCORD_API_BASE } from './config.mjs';
 
 // Distinct prefix from device tokens (`lun_`) so auth.mjs can tell them apart
 // before doing any lookup.
@@ -92,7 +93,7 @@ export async function upsertDiscordAccount(profile) {
  * it responsibly.
  */
 export async function fetchDiscordProfile({ code, clientId, clientSecret, redirectUri }) {
-    const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
+    const tokenRes = await fetch(`${DISCORD_API_BASE}/oauth2/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
@@ -114,7 +115,7 @@ export async function fetchDiscordProfile({ code, clientId, clientSecret, redire
     const { access_token: accessToken } = await tokenRes.json();
     if (!accessToken) throw new Error('Discord returned no access token.');
 
-    const userRes = await fetch('https://discord.com/api/users/@me', {
+    const userRes = await fetch(`${DISCORD_API_BASE}/users/@me`, {
         headers: { Authorization: `Bearer ${accessToken}` }
     });
     if (!userRes.ok) throw new Error('Could not read your Discord profile.');

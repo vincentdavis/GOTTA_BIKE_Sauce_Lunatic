@@ -147,6 +147,14 @@ export const DISCORD_CLIENT_ID = str('DISCORD_CLIENT_ID');
 export const DISCORD_CLIENT_SECRET = str('DISCORD_CLIENT_SECRET');
 export const DISCORD_REDIRECT_URI = str('DISCORD_REDIRECT_URI');
 
+/**
+ * Discord's API root. Configurable so the OAuth exchange can be exercised
+ * against a stand-in during testing; there is no reason to change it in
+ * production. Only the API base moves — the authorize URL a rider's browser
+ * visits is always the real discord.com.
+ */
+export const DISCORD_API_BASE = str('DISCORD_API_BASE', 'https://discord.com/api').replace(/\/+$/, '');
+
 export function hasAccounts() {
     return !!(DISCORD_CLIENT_ID && DISCORD_CLIENT_SECRET && DISCORD_REDIRECT_URI);
 }
