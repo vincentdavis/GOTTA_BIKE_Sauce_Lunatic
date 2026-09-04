@@ -49,8 +49,12 @@ process.exit(0);
 function run(stored, hosted) {
     const r = spawnSync(process.execPath, ['--input-type=module', '--eval', CHILD], {
         env: { ...process.env, CASE_VALUE: stored || '', CASE_HOSTED: hosted || '' },
-        encoding: 'utf8'
+        encoding: 'utf8',
+        // spawnSync waits forever by default, so one wedged child would hang CI
+        // with no output. A boot that takes ten seconds is already a failure.
+        timeout: 10_000
     });
+    if (r.error) return { got: '', stderr: String(r.error.message || r.error) };
     return { got: (r.stdout || '').trim(), stderr: r.stderr };
 }
 

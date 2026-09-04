@@ -76,6 +76,11 @@ check('every built-in is offered', ['tour', 'lunatic', 'domestique', 'tactical']
 check('plus the custom slot', voices[voices.length - 1] === 'custom');
 check('each option is labelled', picker.children.every(o => o.textContent.includes('—')));
 
+section('the voice picker resolves without waiting out its timeout');
+const ttsSel = el('tts-voice');
+check('voices are listed', ttsSel.children.length === 2, `${ttsSel.children.length} option(s)`);
+check('one is selected', !!ttsSel.value, ttsSel.value);
+
 section('sign-out');
 const fired = fire(el('hosted-signout-btn'), 'click');
 check('sign-out is wired', fired === 1);

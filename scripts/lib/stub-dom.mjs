@@ -132,8 +132,14 @@ export function installGlobals({ providerRows = [] } = {}) {
     Object.defineProperty(globalThis, 'navigator', {
         value: { clipboard: { writeText: async () => {} } }, configurable: true
     });
+    // Two voices, not none. populateVoicePicker() waits up to 3s for
+    // `voiceschanged` when getVoices() comes back empty -- correct in a browser,
+    // where the list arrives late, but with an empty stub every boot paid the
+    // full 3 seconds. It also means the picker and pickVoice() actually run.
+    const voice = (name, lang, def = false) => ({ name, lang, default: def, localService: true });
     globalThis.speechSynthesis = {
-        getVoices: () => [], cancel: () => {}, speak: () => {}, addEventListener: () => {}
+        getVoices: () => [voice('Daniel', 'en-GB', true), voice('Samantha', 'en-US')],
+        cancel: () => {}, speak: () => {}, addEventListener: () => {}
     };
     globalThis.SpeechSynthesisUtterance = class { constructor(t) { this.text = t; } };
     // Empty, but present: migrateLegacySettings() scans raw localStorage, and
