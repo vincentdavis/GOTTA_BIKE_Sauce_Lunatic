@@ -1,0 +1,40 @@
+name: Smoke-test the service
+
+# Run the service smoke test from a GitHub runner. Useful whenever the machine
+# you are sitting at cannot reach the deployment -- a corporate network, a
+# sandbox with an egress policy -- because a 403 from a proxy in the middle
+# looks exactly like a broken deploy from the client side.
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: Service base URL
+        required: true
+        default: https://gottabikesaucelunatic-production.up.railway.app
+      live:
+        description: >-
+          Also make ONE real commentary call. Costs a fraction of a cent and
+          consumes one call from a fresh device token's monthly allowance.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Smoke test
+        working-directory: service
+        run: |
+          if [ "${{ inputs.live }}" = "true" ]; then
+            node scripts/smoke.mjs "${{ inputs.url }}" --live
+          else
+            node scripts/smoke.mjs "${{ inputs.url }}"
+          fi

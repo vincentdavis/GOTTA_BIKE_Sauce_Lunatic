@@ -40,8 +40,23 @@ let health;
 try {
     const { res, body } = await get('/healthz');
     health = body;
-    if (res.ok && body.ok) pass('healthz reachable');
-    else fail('healthz reachable', `status ${res.status}`);
+    if (res.ok && body.ok) {
+        pass('healthz reachable');
+    } else {
+        // Bail immediately. Every check below reads `health` or calls another
+        // endpoint, so continuing turns one real problem into a screenful of
+        // invented ones — "discord not configured", "no models" — that say
+        // nothing except that the first request failed.
+        fail('healthz reachable', `status ${res.status}`);
+        if (res.status === 403 || res.status === 407) {
+            console.log('\n403/407 on the very first request usually means a proxy or network policy\n' +
+                        'between you and the service, not a broken deploy. Try from another network.\n');
+        } else {
+            console.log('\nStopping: with /healthz down, every other check would be meaningless.\n' +
+                        'Check the Railway deploy logs.\n');
+        }
+        process.exit(1);
+    }
 } catch (err) {
     fail('healthz reachable', err.message);
     console.log('\nThe service is not answering. Check the Railway deploy logs.\n');
