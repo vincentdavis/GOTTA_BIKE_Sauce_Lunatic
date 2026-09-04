@@ -11,13 +11,34 @@
  * event. Nothing above this file knows which provider answered.
  */
 
-// Anthropic model ids that run adaptive thinking unless told not to. Thinking
-// tokens bill against max_tokens, so at a ~60 token output cap the entire
-// budget disappears into reasoning and the stream comes back empty.
-const ANTHROPIC_THINKING_OFF = new Set(['claude-sonnet-5', 'claude-opus-5']);
+/**
+ * Whether to send `thinking: {type:'disabled'}` for an Anthropic model.
+ *
+ * This workload NEVER wants thinking: the output cap is 60-120 tokens, and
+ * thinking tokens bill against it, so any reasoning at all consumes the whole
+ * budget and the stream comes back empty — with a 200 and no error.
+ *
+ * So the default is OFF, not a list of known-thinking models. That direction
+ * matters: guessing wrong here fails loudly (a model that rejects `disabled`
+ * returns a 400 you can read) while guessing wrong the other way fails
+ * silently. An allowlist also goes stale the moment a new model ships, and the
+ * model ids are operator-configurable env vars — so the safe default has to
+ * hold for a model this code has never heard of.
+ *
+ * One exception: Haiku-class models do not think unless explicitly asked (they
+ * still use the older `budget_tokens` form), so omitting the key is already
+ * correct there — and that is the request shape currently serving production
+ * traffic, which is not worth disturbing for no gain.
+ *
+ * Fable and Mythos are not handled here: they reject `disabled` outright and
+ * cannot work at this cap, so config.mjs refuses to offer them at all.
+ */
+function thinkingDisabledFor(model) {
+    return !String(model).toLowerCase().includes('haiku');
+}
 
 function anthropicRequest({ model, apiKey, systemPrompt, userPrompt, maxTokens }) {
-    const thinkingOff = ANTHROPIC_THINKING_OFF.has(model);
+    const thinkingOff = thinkingDisabledFor(model);
     return {
         url: 'https://api.anthropic.com/v1/messages',
         headers: {

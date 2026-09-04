@@ -89,16 +89,50 @@ export const MODEL_ALIASES = {
     }
 };
 
-/** Aliases that are actually usable: they have both a model id and a key. */
+/**
+ * Models that cannot work at this output cap, whatever else is configured.
+ *
+ * Fable and Mythos have thinking permanently on and reject
+ * `thinking: {type:'disabled'}` with a 400. With a 60-120 token ceiling the
+ * reasoning would consume the entire budget anyway, so there is no setting
+ * that makes them viable here.
+ *
+ * Refusing them at config time matches how a missing key is handled: the alias
+ * is simply not offered, /healthz shows it missing and the smoke test warns —
+ * rather than every rider who picks it getting a 400 mid-race.
+ */
+function modelIsUsable(provider, model) {
+    if (provider !== 'anthropic') return true;
+    const id = String(model).toLowerCase();
+    return !(id.includes('fable') || id.includes('mythos'));
+}
+
+const warnedAliases = new Set();
+
+/** Aliases that are actually usable: a model id, a key, and a viable model. */
 export function availableAliases() {
     return Object.entries(MODEL_ALIASES)
-        .filter(([, a]) => a.model && a.apiKey)
+        .filter(([id, a]) => {
+            if (!a.model || !a.apiKey) return false;
+            if (!modelIsUsable(a.provider, a.model)) {
+                // Once per process, not per request.
+                if (!warnedAliases.has(id)) {
+                    warnedAliases.add(id);
+                    console.error(`[config] ${id} is not offered: "${a.model}" cannot disable ` +
+                        'thinking, so it returns nothing at this output cap. Use a Sonnet, Opus ' +
+                        'or Haiku model.');
+                }
+                return false;
+            }
+            return true;
+        })
         .map(([id, a]) => ({ id, ...a }));
 }
 
 export function resolveAlias(id) {
     const a = MODEL_ALIASES[id];
     if (!a || !a.model || !a.apiKey) return null;
+    if (!modelIsUsable(a.provider, a.model)) return null;
     return { id, ...a };
 }
 
