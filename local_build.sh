@@ -29,6 +29,8 @@ find pages/src -name '*.mjs' -exec node --check {} \;
 # both of them for real before installing anything.
 node scripts/settings-boot-test.mjs > /dev/null
 node scripts/overlay-boot-test.mjs > /dev/null
+node scripts/prompt-migration-test.mjs > /dev/null
+node scripts/prompt-parity-test.mjs > /dev/null
 
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"

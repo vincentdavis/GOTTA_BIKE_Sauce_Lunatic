@@ -1,5 +1,5 @@
 /**
- * Server-side announcer styles -- the canonical prompt table.
+ * The built-in announcer voices, as the mod ships them.
  *
  * THE PROMPT TEXT BELOW IS DUPLICATED, BYTE FOR BYTE, IN THE OTHER FILE.
  *
@@ -9,27 +9,14 @@
  * they drift. An earlier comment asked a human to keep them in sync and that
  * quietly failed: three of the four voices existed on only one side.
  *
- * THIS FILE IS ALSO HOW "no custom prompting on the free tier" IS ENFORCED.
+ * These are the BUNDLED FLOOR. A rider on their own API key builds the request
+ * here, so this table is what they actually get; a hosted rider's system prompt
+ * is substituted server-side and this copy is only what the settings window
+ * shows them. Either way the mod stays fully usable with the service
+ * unreachable, which is the point of bundling it at all.
  *
- * The service speaks the OpenAI chat-completions API, so a client can put
- * whatever it likes in a system message. On the free tier that system message
- * is DISCARDED and replaced with one of these. The client's user message -- the
- * rendered race data -- is passed through, because that is the payload the
- * feature actually needs.
- *
- * That leaves one honest gap: a determined user could smuggle instructions into
- * the user message, since the mod lets them edit their user template. It is not
- * worth engineering against. What they would get for the trouble is a single
- * sentence from a cheap model under a hard output cap and a monthly quota. The
- * limits, not the prompt swap, are what bound the cost; the prompt swap is what
- * keeps the product coherent and makes the paid tier worth buying.
- *
- * When paid accounts land, a licensed request keeps its own system message and
- * skips this file entirely (see `canUseCustomPrompt` in auth.mjs).
- *
- * `userPromptTemplate` is carried here even though the service never renders it
- * -- the client does. It lives here so this file is the whole definition of a
- * voice, which is what lets /v1/prompts serve it to BYOK clients later.
+ * A leaf module, like providers.mjs: it imports nothing, so a test can load it
+ * without a DOM or a Sauce host.
  */
 
 const SHARED_RULES = `
@@ -53,7 +40,7 @@ FIELD (front to back):
 
 ${closing}`;
 
-export const STYLES = {
+export const BUILTIN_PROMPTS = {
     tour: {
         version: 1,
         label: 'Tour de France',
@@ -139,20 +126,29 @@ ${SHARED_RULES}`,
     }
 };
 
-export const DEFAULT_STYLE = 'tour';
-
-export function styleFor(id) {
-    return STYLES[id] || STYLES[DEFAULT_STYLE];
-}
+export const DEFAULT_PROMPT_ID = 'tour';
 
 /**
- * What GET /v1/styles returns. Deliberately id/label/description only: the text
- * is what the free tier is buying, and clients on that path never need it.
+ * Stored ids that no longer name a voice. Kept as a table rather than folded
+ * into a fallback so the migration is legible and reversible: 'professional',
+ * 'casual' and 'dramatic' were three settings values that all resolved to the
+ * same Tour de France prompt.
  */
-export function listStyles() {
-    return Object.entries(STYLES).map(([id, s]) => ({
+export const LEGACY_PROMPT_IDS = {
+    professional: 'tour',
+    casual: 'tour',
+    dramatic: 'tour'
+};
+
+export function promptFor(id) {
+    return BUILTIN_PROMPTS[id] || BUILTIN_PROMPTS[DEFAULT_PROMPT_ID];
+}
+
+export function listPrompts() {
+    return Object.entries(BUILTIN_PROMPTS).map(([id, p]) => ({
         id,
-        label: s.label,
-        description: s.description
+        version: p.version,
+        label: p.label,
+        description: p.description
     }));
 }

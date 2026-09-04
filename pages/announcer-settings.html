@@ -243,10 +243,8 @@
                         <select id="hosted-model"><option value="free-fast">Fast</option></select>
                     </label>
 
-                    <label>
-                        <key>Voice:</key>
-                        <select id="hosted-style"><option value="tour">Tour de France</option></select>
-                    </label>
+                    <p class="help-text">The announcer's voice is chosen on the
+                        <strong>Prompts</strong> tab, and applies here too.</p>
                 </div>
 
                 <p class="help-text" data-provider="compatible" id="compat-hint"></p>
@@ -277,10 +275,11 @@
                     and you get the same one back. Connecting anonymously works without an account, but
                     the allowance is smaller and clearing your settings loses it.</p>
 
-                <p class="help-text" data-provider="hosted">The free tier provides the announcer
-                    voices above &mdash; your own prompts from the Prompts tab are not used. No API
-                    key is needed and nothing is billed to you. Rider data, including the names and
-                    power of riders around you, is sent to the service.</p>
+                <p class="help-text" data-provider="hosted">The built-in voices on the Prompts tab
+                    all work here. A <em>custom</em> prompt of your own does not &mdash; on the free
+                    tier the service supplies the announcer's instructions, and yours is discarded.
+                    No API key is needed and nothing is billed to you. Rider data, including the
+                    names and power of riders around you, is sent to the service.</p>
 
                 <div class="api-actions" data-provider="anthropic compatible">
                     <button type="button" id="test-api-btn">Test Connection</button>
@@ -321,16 +320,17 @@
         <div class="settings-content">
             <section class="settings-section">
                 <h2>Commentary Style</h2>
-                <p class="help-text">Choose a preset style or customize the prompts for your preferred commentary style.</p>
+                <p class="help-text">Every voice here works on your own API key <em>and</em> on the
+                    free hosted service. Pick one on this tab and it applies to whichever provider
+                    you are using.</p>
 
                 <form id="prompt-options">
                     <label>
                         <key>Style preset:</key>
-                        <select name="stylePreset" id="style-preset">
-                            <option value="dramatic">Tour de France - Punchy race-call, one line</option>
-                            <option value="tactical">Tactical Coach - Attack advice, threats to watch</option>
-                            <option value="custom">Custom - Use your own prompts</option>
-                        </select>
+                        <!-- Filled by populatePromptPicker() from the shared prompt
+                             table. A hardcoded list here is what let the mod and the
+                             service drift apart in the first place. -->
+                        <select name="stylePreset" id="style-preset"></select>
                     </label>
                 </form>
             </section>
@@ -509,8 +509,9 @@
                 <p>Pick one of three ways to get commentary, on the <strong>AI Provider</strong> tab.</p>
                 <ol>
                     <li><strong>Lunatic hosted &mdash; no API key.</strong> Paste the service URL, click
-                        Connect, and pick a model and a voice. A monthly allowance of free calls, nothing
-                        billed to you. Your own prompts from the Prompts tab are not used on this option.</li>
+                        Connect, and pick a model. A monthly allowance of free calls, nothing billed to
+                        you. The built-in voices all work; a <em>custom</em> prompt of your own does not,
+                        because the service supplies the instructions on the free tier.</li>
                     <li><strong>Anthropic.</strong> Sign up at
                         <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>,
                         create a key, paste it, and choose a model. Usage is billed to your account.</li>
@@ -519,8 +520,16 @@
                         Model ids are free text because they change often &mdash; paste whatever your
                         service currently offers.</li>
                 </ol>
-                <p>Then click <strong>Test Connection</strong> (or Connect), choose a style on the Prompts
-                tab, and ride. The commentary fires on what happens on the road, not on a timer.</p>
+                <p>Then click <strong>Test Connection</strong> (or Connect), choose a voice on the
+                <strong>Prompts</strong> tab, and ride. There is one voice setting and it applies to
+                whichever provider you are on. The commentary fires on what happens on the road, not
+                on a timer.</p>
+
+                <p>Four voices ship with the mod: <strong>Tour de France</strong>, the television booth;
+                <strong>Lunatic</strong>, the same race called by someone over-caffeinated;
+                <strong>Old Pro</strong>, a retired rider in the second chair; and
+                <strong>Tactical Coach</strong>, which is not commentary at all but a directeur on the
+                radio telling you what to do about it.</p>
             </section>
 
             <section class="settings-section">

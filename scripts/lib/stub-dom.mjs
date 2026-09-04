@@ -173,9 +173,9 @@ export const subscribe = (name, fn) => { subscribed.set(name, fn); };
 `;
 
 /**
- * Load announcer.mjs with its two imports pointed at real file paths: the Sauce
- * one is an absolute URL only the Electron host serves, and the relative one
- * would not resolve from a temp directory.
+ * Load announcer.mjs with its imports pointed at real file paths: the Sauce one
+ * is an absolute URL only the Electron host serves, and the relative ones would
+ * not resolve from the temp directory the copy under test lives in.
  *
  * UNDER_TEST points at a different copy -- useful for confirming a regression
  * against an older revision.
@@ -186,7 +186,10 @@ export async function loadAnnouncer() {
 
     const src = readFileSync(process.env.UNDER_TEST || join(REPO, 'pages/src/announcer.mjs'), 'utf8')
         .replace("'/pages/src/common.mjs'", JSON.stringify(pathToFileURL(join(tmp, 'common-stub.mjs')).href))
-        .replace("'./providers.mjs'", JSON.stringify(pathToFileURL(join(REPO, 'pages/src/providers.mjs')).href));
+        // Every sibling leaf module, not a named list: the copy under test lives
+        // in a temp directory, so any './x.mjs' would fail to resolve there.
+        .replace(/'\.\/([\w-]+\.mjs)'/g,
+            (_, f) => JSON.stringify(pathToFileURL(join(REPO, 'pages/src', f)).href));
     writeFileSync(join(tmp, 'announcer.mjs'), src);
 
     const mod = await import(pathToFileURL(join(tmp, 'announcer.mjs')).href);

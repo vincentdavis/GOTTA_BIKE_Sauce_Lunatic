@@ -68,6 +68,14 @@ fire(providerSel, 'change');
 check('an anonymous token reads as Anonymous', badge.textContent === 'Anonymous', badge.textContent);
 check('the badge class follows the state', badge.className === 'conn-badge anon', badge.className);
 
+section('the voice picker is built from the shared prompt table');
+const picker = el('style-preset');
+const voices = picker.children.map(o => o.value);
+check('every built-in is offered', ['tour', 'lunatic', 'domestique', 'tactical']
+    .every(id => voices.includes(id)), voices.join(', '));
+check('plus the custom slot', voices[voices.length - 1] === 'custom');
+check('each option is labelled', picker.children.every(o => o.textContent.includes('—')));
+
 section('sign-out');
 const fired = fire(el('hosted-signout-btn'), 'click');
 check('sign-out is wired', fired === 1);

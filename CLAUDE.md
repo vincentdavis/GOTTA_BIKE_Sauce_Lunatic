@@ -17,11 +17,14 @@ manifest.json              mod metadata + the single window definition
 pages/announcer.html       overlay window
 pages/announcer-settings.html  settings (Settings/API/Prompts/Data/Help tabs)
 pages/src/announcer.mjs    all logic (~1900 lines)
+pages/src/prompts.mjs      the built-in announcer voices (leaf module)
 pages/css/announcer.css    styles
 pages/images/logo.svg      source of truth for the logo; PNGs are rendered from it
 scripts/lib/stub-dom.mjs   a DOM + Sauce `common` small enough to boot the mod in Node
 scripts/settings-boot-test.mjs  boots the settings window
 scripts/overlay-boot-test.mjs   boots the overlay, incl. the ~1Hz nearby handler
+scripts/prompt-migration-test.mjs  legacy voice ids land where they should
+scripts/prompt-parity-test.mjs     the mod and the service define the same voices
 ```
 
 Run **both** boot tests after touching `announcer.mjs`. They are the only things
@@ -60,6 +63,13 @@ Both HTML files import the same module and call different entry points:
 - Settings bags are namespaced by window-**instance** id, not by
   `data-settings-key`. A different mod can never see another's bag via
   `settingsStore` — only a raw `localStorage` scan can (see `migrateLegacySettings`).
+- **`pages/src/prompts.mjs` and `service/src/styles.mjs` must stay byte-identical.**
+  The mod ships only `pages/`, the service only `service/`, so neither can import
+  the other and the table is written twice. `scripts/prompt-parity-test.mjs` is what
+  enforces it — a comment asking a human to do it already failed silently, leaving
+  three of four voices reachable on only one side.
+- There is **one** voice setting, `stylePreset`, for every provider. `hostedStyle` is
+  a migrated-away legacy key; do not write it.
 - Keys with a leading `/` are **global and shared across all mods** on the Sauce
   origin. That is why `ATHLETE_DATA_KEY` can read GOTTA.BIKE's imported data, and
   why our own counters must NOT reuse GOTTA's key strings.

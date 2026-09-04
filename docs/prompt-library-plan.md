@@ -266,13 +266,19 @@ Nothing above works while the two sets disagree. Step one, before any of it:
 That last item is worth more than it looks. It is the same class of problem as the
 settings window nobody executed: a promise in a comment with nothing enforcing it.
 
+**Shipped in v0.5.0**, with one addition the plan did not anticipate: reconciling the
+id spaces made `stylePreset` and `hostedStyle` name the same voices, so two settings
+over one id space could now only disagree *silently* — worse than the honest
+duplication before it. They are unified onto `stylePreset`, the hosted picker is gone,
+and a hosted-only choice migrates across unless the shared key was set deliberately.
+
 ---
 
 ## 8. Phasing
 
 | phase | ships | value on its own |
 |---|---|---|
-| **1. Reconcile** | one canonical set, `userPromptTemplate` + `version` server-side, mirrored bundle, drift check in CI | Lunatic and Old Pro become reachable on BYOK — the biggest single win, and no new machinery |
+| **1. Reconcile** ✅ *done, v0.5.0* | one canonical set, `userPromptTemplate` + `version` server-side, mirrored bundle, drift check in CI | Lunatic and Old Pro became reachable on BYOK — the biggest single win, and no new machinery |
 | **2. Library** | `promptLibrary`, migration, the redesigned Prompts tab, duplicate/edit/create/rename/delete, per-provider honesty | the whole second feature, entirely offline |
 | **3. Fetch** | `GET /v1/prompts` + ETag, the 24h check, cache, adopt rules, `promptUpdates` setting | improved voices reach existing installs |
 | **4. Polish** | "what changed" diff view, "the source has moved on" prompt, new-voice badge | makes phase 3 legible instead of mysterious |
