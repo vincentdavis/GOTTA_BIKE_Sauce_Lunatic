@@ -46,6 +46,15 @@ jobs:
           BASE="${TAG%%-*}"   # v0.2.0-rc1 -> 0.2.0, so a pre-release shares the manifest version
           echo "tag=$TAG base=$BASE manifest=$MANIFEST"
 
+          # Catch a malformed tag BEFORE comparing versions. The glob trigger is
+          # `v*`, so a typo like `v.0.3.0` still starts a run, and comparing it
+          # to the manifest produces a version-mismatch error that sends you off
+          # bumping the manifest when the real problem is the tag name.
+          if ! printf '%s' "$BASE" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Tag $GITHUB_REF_NAME is not a version tag. Expected vMAJOR.MINOR.PATCH, or vMAJOR.MINOR.PATCH-suffix for a pre-release — for example v0.3.0 or v0.3.0-rc1. Delete this tag and re-tag."
+            exit 1
+          fi
+
           if [ "$BASE" != "$MANIFEST" ]; then
             echo "::error::Tag v$TAG does not match manifest.json version $MANIFEST. Bump the manifest and re-tag."
             exit 1
