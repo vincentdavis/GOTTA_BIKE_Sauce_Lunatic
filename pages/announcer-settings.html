@@ -93,9 +93,16 @@
                         <input type="number" name="maxRiders" min="3" max="30" step="1" style="--size: 5"/>
                     </label>
                     <label>
-                        <key>History entries to keep:</key>
+                        <key>Show previous commentary:</key>
+                        <input type="checkbox" name="showHistory"/>
+                    </label>
+                    <label>
+                        <key>How many to show:</key>
                         <input type="number" name="historyCount" min="0" max="10" step="1" style="--size: 4"/>
                     </label>
+                    <p class="help-text">Previous lines appear directly under the current one in the
+                        overlay. Turn this off for a single-line overlay that takes less room over
+                        the race.</p>
                 </form>
             </section>
 

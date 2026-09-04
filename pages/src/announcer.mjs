@@ -183,6 +183,7 @@ common.settingsStore.setDefault({
     updateInterval: 45,
     maxRiders: 10,
     historyCount: 3,
+    showHistory: true,
     // API settings
     aiProvider: DEFAULT_PROVIDER,
     claudeApiKey: '',
@@ -403,6 +404,9 @@ export async function lunaticAnnouncerMain() {
             updateMuteButton();
             if (!common.settingsStore.get('ttsEnabled')) cancelSpeech();
         }
+        if (changed.has('showHistory') || changed.has('historyCount')) {
+            renderHistory();
+        }
     });
 
     // Listen for athlete data + shared cost updates
@@ -570,14 +574,6 @@ function setupMainWindowUI() {
         copyBtn.addEventListener('click', copyCommentary);
     }
 
-    // History toggle
-    const historyHeader = document.querySelector('.history-header');
-    if (historyHeader) {
-        historyHeader.addEventListener('click', () => {
-            historyHeader.classList.toggle('expanded');
-        });
-    }
-
     // Error toast dismiss
     const errorDismiss = document.querySelector('.error-dismiss');
     if (errorDismiss) {
@@ -638,9 +634,11 @@ function updatePauseButton() {
 
     if (statusEl) {
         const manual = parseInt(common.settingsStore.get('updateInterval') ?? 60, 10) === 0;
-        statusEl.textContent = isPaused ? 'Paused' : (manual ? 'Manual' : 'Active');
+        statusEl.title = isPaused ? 'Commentary paused'
+            : (manual ? 'Manual only — use the refresh button' : 'Listening for race events');
         statusEl.classList.toggle('paused', isPaused);
-        statusEl.classList.toggle('active', !isPaused);
+        statusEl.classList.toggle('manual', !isPaused && manual);
+        statusEl.classList.toggle('active', !isPaused && !manual);
     }
 }
 
@@ -649,15 +647,12 @@ function updateApiStatus() {
     const statusEl = document.getElementById('api-status');
 
     if (statusEl) {
-        if (configured) {
-            statusEl.textContent = 'Configured';
-            statusEl.classList.remove('not-configured', 'error');
-            statusEl.classList.add('connected');
-        } else {
-            statusEl.textContent = 'Not configured';
-            statusEl.classList.remove('connected', 'error');
-            statusEl.classList.add('not-configured');
-        }
+        // A dot carries the state; the detail lives in the tooltip, since the
+        // overlay sits on top of a race and every pixel of chrome is in the way.
+        statusEl.title = configured ? `${activeProvider().label} ready` : 'No AI provider configured';
+        statusEl.classList.toggle('connected', configured);
+        statusEl.classList.toggle('not-configured', !configured);
+        statusEl.classList.remove('error');
     }
 }
 
@@ -665,7 +660,11 @@ function markApiError(err) {
     const statusEl = document.getElementById('api-status');
     if (!statusEl) return;
     const msg = err?.message || '';
-    statusEl.textContent = /401|invalid|api[-_ ]?key|authentication|not_found|404/i.test(msg) ? 'Invalid key/model' : 'Error';
+    const likelyConfig = /401|invalid|api[-_ ]?key|authentication|not_found|404/i.test(msg);
+    // The dot goes red; the tooltip carries the actual message, which is the
+    // only place the real cause was ever visible.
+    statusEl.title = (likelyConfig ? 'Check your key or model — ' : 'Last call failed — ') +
+        (msg || 'unknown error');
     statusEl.classList.remove('connected', 'not-configured');
     statusEl.classList.add('error');
 }
@@ -1501,40 +1500,36 @@ function updateCost(providerId, model, inputTokens, outputTokens) {
 // and #total-calls-display).
 function renderCost() {
     const calls = common.settingsStore.get(CALLS_KEY) || 0;
+    const el = document.getElementById('session-cost');
 
-    // On the hosted tier there is no per-token price to show; what the rider
-    // actually wants to know is how many calls are left.
+    // The overlay shows a bare "$" and puts the figure in the tooltip: the
+    // number matters when you go looking for it, not while you are racing.
+    // The settings window has room, so it still shows the value inline.
+    const inline = document.getElementById('session-cost-display');
+    const callsEl = document.getElementById('total-calls-display');
+    if (callsEl) callsEl.textContent = String(calls);
+
     if (activeProviderId() === 'hosted') {
         const left = common.settingsStore.get(QUOTA_KEY);
         const label = (left === null || left === undefined) ? '—' : `${left} left`;
-        for (const id of ['session-cost', 'session-cost-display']) {
-            const el = document.getElementById(id);
-            if (el) {
-                el.textContent = label;
-                el.title = 'Free calls remaining this month on the hosted service.';
-            }
-        }
-        const callsEl = document.getElementById('total-calls-display');
-        if (callsEl) callsEl.textContent = String(calls);
+        const detail = (left === null || left === undefined)
+            ? 'Free calls remaining: unknown until the next call'
+            : `${left} free calls left this month · ${calls} calls this session`;
+        if (el) { el.textContent = '$'; el.title = detail; el.classList.add('free'); }
+        if (inline) { inline.textContent = label; inline.title = detail; }
         return;
     }
 
     const cost = common.settingsStore.get(COST_KEY) || 0;
     const tracked = currentCostIsTracked();
-    // The asterisk means "at least this" — some calls went to a model we have
-    // no price for, so the true figure is higher.
-    const costStr = `$${cost < 1 ? cost.toFixed(4) : cost.toFixed(2)}${tracked ? '' : '*'}`;
-    const note = tracked ? '' : 'The selected model has no known price — enter one in settings to track cost.';
+    const money = `$${cost < 1 ? cost.toFixed(4) : cost.toFixed(2)}${tracked ? '' : '*'}`;
+    const detail = tracked
+        ? `${money} this session · ${calls} calls`
+        : `${money} this session · ${calls} calls — the asterisk means at least this much: ` +
+          'the selected model has no known price. Enter one in settings to track it.';
 
-    for (const id of ['session-cost', 'session-cost-display']) {
-        const el = document.getElementById(id);
-        if (el) {
-            el.textContent = costStr;
-            el.title = note;
-        }
-    }
-    const callsEl = document.getElementById('total-calls-display');
-    if (callsEl) callsEl.textContent = String(calls);
+    if (el) { el.textContent = '$'; el.title = detail; el.classList.remove('free'); }
+    if (inline) { inline.textContent = money; inline.title = tracked ? '' : detail; }
 }
 
 function escapeHtml(s) {
@@ -1595,7 +1590,9 @@ function renderHistory() {
 
     if (!container || !entriesEl) return;
 
-    if (commentaryHistory.length <= 1) {
+    // Off by setting, or nothing to show yet. Entry 0 is the line already
+    // displayed above, so two entries are needed before there is any history.
+    if (!common.settingsStore.get('showHistory') || commentaryHistory.length <= 1) {
         container.hidden = true;
         return;
     }

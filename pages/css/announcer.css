@@ -38,48 +38,50 @@ body.solid-background {
 /* Status Bar */
 #status-bar {
     display: flex;
-    flex-wrap: wrap;
-    gap: 1em;
-    padding: 0.4em 0.6em;
+    align-items: center;
+    gap: 0.7em;
+    padding: 0.35em 0.6em;
     font-size: 0.8em;
     background: rgba(0, 0, 0, 0.3);
     border-radius: 4px;
 }
 
-.status-item {
-    display: flex;
-    align-items: center;
-    gap: 0.3em;
+/* Two dots and a $. Detail lives in the title attribute — this bar sits on top
+   of a bike race, so it earns as few pixels as it can. */
+.status-dot {
+    width: 0.62em;
+    height: 0.62em;
+    border-radius: 50%;
+    flex: none;
+    background: #6b7478;              /* unknown / not configured */
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+    cursor: default;
 }
 
-.status-label {
-    color: #888;
+.status-dot.connected,
+.status-dot.active { background: #52c07a; }
+.status-dot.paused { background: #e0a33a; }
+.status-dot.manual { background: #4f9ad6; }
+.status-dot.error { background: #d75a44; }
+.status-dot.not-configured { background: #6b7478; }
+
+.status-money {
+    font-weight: 600;
+    color: #9aa4a8;
+    cursor: default;
+    line-height: 1;
 }
 
-.status-value {
-    color: #fff;
-    font-weight: 500;
-}
+.status-money:hover { color: #d8dee0; }
+.status-money.free { color: #6fb0a2; }
 
-.status-value.not-configured {
-    color: #ff9800;
-}
 
-.status-value.connected {
-    color: #4caf50;
-}
 
-.status-value.error {
-    color: #f44336;
-}
 
-.status-value.paused {
-    color: #ff9800;
-}
 
-.status-value.active {
-    color: #4caf50;
-}
+
+
+
 
 /* Commentary Container */
 #commentary-container {
@@ -163,38 +165,13 @@ body.solid-background {
     display: none;
 }
 
-.history-header {
-    cursor: pointer;
-    padding: 0.5em;
-    color: #888;
-    font-size: 0.85em;
-    display: flex;
-    align-items: center;
-    gap: 0.3em;
-}
-
-.history-header:hover {
-    color: #ccc;
-}
-
-.history-toggle ms {
-    font-size: 1.2em;
-    transition: transform 0.2s;
-}
-
-.history-header.expanded .history-toggle ms {
-    transform: rotate(180deg);
-}
-
+/* Previous lines sit directly under the current one. Visibility is the
+   showHistory setting; there is no expand/collapse any more. */
 .history-entries {
-    display: none;
-    flex-direction: column;
-    gap: 0.5em;
-    padding-top: 0.5em;
-}
-
-.history-header.expanded + .history-entries {
     display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+    padding-top: 0.5em;
 }
 
 .history-entry {

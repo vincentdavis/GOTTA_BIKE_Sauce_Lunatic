@@ -28,37 +28,23 @@
     <div id="content">
         <!-- Status bar -->
         <div id="status-bar">
-            <div id="connection-status" class="status-item">
-                <span class="status-label">API:</span>
-                <span id="api-status" class="status-value not-configured">Not configured</span>
-            </div>
-            <div id="update-status" class="status-item">
-                <span class="status-label">Updates:</span>
-                <span id="auto-update-status" class="status-value">Paused</span>
-            </div>
-            <div id="cost-status" class="status-item">
-                <span class="status-label">Est. cost:</span>
-                <span id="session-cost" class="status-value">$0.00</span>
-            </div>
+            <span id="api-status" class="status-dot not-configured" title="Not configured"></span>
+            <span id="auto-update-status" class="status-dot" title="Paused"></span>
+            <span id="session-cost" class="status-money" title="No calls yet">$</span>
         </div>
 
         <!-- Commentary display area -->
         <div id="commentary-container">
             <div id="current-commentary" class="commentary-entry">
                 <div class="commentary-text">
-                    <p class="placeholder-text">Configure your Claude API key in settings (the <ms>settings</ms> gear above) to start receiving live race commentary.</p>
+                    <p class="placeholder-text">Pick an AI provider in settings (the <ms>settings</ms> gear above) to start receiving live race commentary.</p>
                 </div>
             </div>
         </div>
 
-        <!-- Commentary history (collapsible) -->
+        <!-- Previous commentary, shown directly under the current line.
+             Visibility is the showHistory setting, not a click-to-expand. -->
         <div id="history-container" hidden>
-            <div class="history-header">
-                <span class="history-toggle" title="Toggle history">
-                    <ms>expand_more</ms>
-                    <span>Previous Commentary</span>
-                </span>
-            </div>
             <div id="history-entries" class="history-entries"></div>
         </div>
     </div>
