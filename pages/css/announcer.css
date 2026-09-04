@@ -611,6 +611,38 @@ body:not(.transparent-bg) {
     display: none !important;
 }
 
+/* Hosted connection state. The badge carries the distinction that actually
+   matters to a rider: an anonymous token is lost when settings are cleared,
+   a Discord one survives. */
+.conn-state {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    margin: 0.8em 0 0.4em;
+    font-size: 0.95em;
+}
+
+.conn-badge {
+    font-size: 0.8em;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.2em 0.6em;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+}
+
+.conn-badge.discord { color: #6fb0a2; }
+.conn-badge.anon { color: #e9a63f; }
+.conn-badge.none { color: #8a9499; }
+
+/* Buttons the state renderer hides. [hidden] alone loses to the settings
+   stylesheet's own display rule on buttons. */
+.api-actions button[hidden] {
+    display: none !important;
+}
+
 /* Data Field Groups */
 .data-field-group {
     margin-bottom: 1em;

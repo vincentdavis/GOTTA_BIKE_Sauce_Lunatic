@@ -38,6 +38,17 @@ export const QUOTA_KEY = '/gotta-bike-lunatic-quota';
 // DEVICE_TOKEN_KEY either way, so nothing in the request path branches on this.
 export const ACCOUNT_KEY = '/gotta-bike-lunatic-account';
 
+/**
+ * Which kind of credential is stored: a Discord account key or an anonymous
+ * device token. Derived from the prefix the service mints, so it stays correct
+ * even if the cached display name is stale.
+ */
+export function tokenKind(token) {
+    const t = String(token || '');
+    if (!t) return 'none';
+    return t.startsWith('luna_') ? 'discord' : 'anon';
+}
+
 // With thinking disabled, Opus 5 occasionally leaks `<thinking>` tags into the
 // visible text. One line of system prompt is cheaper than stripping them out.
 const NO_INTERNAL_TAGS = 'Do not include internal or system XML tags in your response.';

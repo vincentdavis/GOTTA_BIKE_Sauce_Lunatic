@@ -3,7 +3,7 @@ import * as common from '/pages/src/common.mjs';
 // though the mod's own file sits at the same relative path on disk.
 import {
     PROVIDERS, DEFAULT_PROVIDER, COMPATIBLE_PRESETS, DEVICE_TOKEN_KEY, QUOTA_KEY, ACCOUNT_KEY,
-    providerFor, presetFor, costFor, streamCompletion
+    providerFor, presetFor, costFor, streamCompletion, tokenKind
 } from './providers.mjs';
 
 // Storage keys (global, shared across windows)
@@ -1828,6 +1828,48 @@ function setupProviderControls() {
     const baseUrlInput = document.querySelector('input[name="compatBaseUrl"]');
     const hintEl = document.getElementById('compat-hint');
 
+    /**
+     * One place that decides what the connection row says and which buttons
+     * are offered. Three states, and the difference between them matters: an
+     * anonymous token is lost when settings are cleared, a Discord one is not.
+     */
+    function renderConnection() {
+        const kind = tokenKind(common.settingsStore.get(DEVICE_TOKEN_KEY));
+        const name = common.settingsStore.get(ACCOUNT_KEY)?.name;
+
+        if (badgeEl) {
+            badgeEl.textContent = { discord: 'Discord', anon: 'Anonymous', none: 'Not connected' }[kind];
+            badgeEl.className = `conn-badge ${kind}`;
+        }
+        if (connTextEl) {
+            connTextEl.textContent = {
+                discord: name ? `Signed in as ${name}` : 'Signed in with Discord',
+                anon: 'No account — clearing your settings will lose this connection',
+                none: 'Sign in with Discord, or connect anonymously to try it'
+            }[kind];
+        }
+
+        // Offer the anonymous button only when it is an upgrade or a start —
+        // never as a way to downgrade an account you are already signed into.
+        if (signInBtn) signInBtn.hidden = kind === 'discord';
+        if (connectBtn) connectBtn.hidden = kind !== 'none';
+        if (signOutBtn) signOutBtn.hidden = kind === 'none';
+
+        if (quotaEl && kind === 'none') quotaEl.textContent = '';
+    }
+
+    signOutBtn?.addEventListener('click', () => {
+        // Local only. The account and its key live on server; signing in again
+        // returns the same one, so this cannot orphan an allowance.
+        common.settingsStore.set(DEVICE_TOKEN_KEY, '');
+        common.settingsStore.set(ACCOUNT_KEY, null);
+        common.settingsStore.set(QUOTA_KEY, null);
+        setStatus('Signed out', '');
+        if (linkEl) linkEl.hidden = true;
+        renderConnection();
+        updateApiInfo();
+    });
+
     const applyVisibility = () => {
         const id = activeProviderId();
         for (const el of document.querySelectorAll('[data-provider]')) {
@@ -1837,6 +1879,7 @@ function setupProviderControls() {
             el.classList.toggle('hidden', !owners.includes(id));
         }
         if (hintEl) hintEl.textContent = presetFor(activePresetId()).hint || '';
+        renderConnection();
         updateApiInfo();
     };
 
@@ -1882,10 +1925,12 @@ function setupHostedControls() {
     const quotaEl = document.getElementById('hosted-quota');
     const modelSel = document.getElementById('hosted-model');
     const styleSel = document.getElementById('hosted-style');
-    const baseInput = document.querySelector('input[name="hostedBaseUrl"]');
+    const baseInput = document.getElementById('hosted-base-url');
     const signInBtn = document.getElementById('hosted-signin-btn');
+    const signOutBtn = document.getElementById('hosted-signout-btn');
     const linkEl = document.getElementById('hosted-signin-link');
-    const acctEl = document.getElementById('hosted-account');
+    const badgeEl = document.getElementById('hosted-conn-badge');
+    const connTextEl = document.getElementById('hosted-conn-text');
     let signingIn = false;
 
     if (!connectBtn && !modelSel) return;   // not the settings window
@@ -1951,13 +1996,12 @@ function setupHostedControls() {
         if (quotaEl) {
             quotaEl.textContent = `${quota.remaining} of ${quota.limit} free calls left this month`;
         }
-        if (acctEl) {
-            // The service is the authority on who the key belongs to; the
-            // stored label is only a fallback for an offline settings window.
-            const stored = common.settingsStore.get(ACCOUNT_KEY);
-            const name = quota.account?.name || stored?.name || '';
-            acctEl.textContent = name ? `Signed in as ${name}` : 'Not signed in — using an anonymous device token';
+        // The service is the authority on who the key belongs to; the stored
+        // label is only a fallback for an offline settings window.
+        if (quota.account?.name) {
+            common.settingsStore.set(ACCOUNT_KEY, { name: quota.account.name });
         }
+        renderConnection();
         return quota;
     }
 
@@ -2019,6 +2063,14 @@ function setupHostedControls() {
             signInBtn.disabled = false;
         }
     });
+
+    if (baseInput) {
+        baseInput.value = common.settingsStore.get('hostedBaseUrl') || baseInput.value || '';
+        common.settingsStore.set('hostedBaseUrl', serviceUrl());
+        baseInput.addEventListener('change', () => {
+            common.settingsStore.set('hostedBaseUrl', serviceUrl());
+        });
+    }
 
     connectBtn?.addEventListener('click', async () => {
         connectBtn.disabled = true;

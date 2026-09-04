@@ -154,26 +154,6 @@
                         </select>
                     </label>
 
-                    <!-- Lunatic hosted service: no API key, a monthly free allowance -->
-                    <label data-provider="hosted">
-                        <key>Service URL:</key>
-                        <input type="text" name="hostedBaseUrl"
-                               value="https://gottabikesaucelunatic-production.up.railway.app"
-                               placeholder="https://your-app.up.railway.app" style="--size: 34"/>
-                    </label>
-
-                    <!-- No name attribute on purpose: these are filled from the
-                         service after the form has already bound. -->
-                    <label data-provider="hosted">
-                        <key>Model:</key>
-                        <select id="hosted-model"><option value="free-fast">Fast</option></select>
-                    </label>
-
-                    <label data-provider="hosted">
-                        <key>Voice:</key>
-                        <select id="hosted-style"><option value="tour">Tour de France</option></select>
-                    </label>
-
                     <!-- Anthropic -->
                     <label class="api-key-row" data-provider="anthropic">
                         <key>API Key:</key>
@@ -231,18 +211,49 @@
                         <input type="number" name="compatOutputCost" min="0" step="0.01" placeholder="output" style="--size: 8"/>
                     </label>
 
-                    <label>
+                    <label data-provider="anthropic compatible">
                         <key>Max tokens:</key>
                         <input type="number" name="maxTokens" min="40" max="200" step="10" style="--size: 6"/>
                     </label>
                 </form>
 
+                <!-- OUTSIDE the form on purpose. initSettingsForm() re-applies
+                     stored values to the whole form on any change, and it has no
+                     key for a control with no name attribute — so a nameless
+                     select inside the form gets wiped whenever a sibling
+                     changes. These are populated from the service and managed
+                     entirely by setupHostedControls(). -->
+                <div id="hosted-fields" data-provider="hosted">
+                    <label>
+                        <key>Service URL:</key>
+                        <input type="text" id="hosted-base-url"
+                               value="https://gottabikesaucelunatic-production.up.railway.app"
+                               placeholder="https://your-app.up.railway.app" style="--size: 34"/>
+                    </label>
+
+                    <label>
+                        <key>Model:</key>
+                        <select id="hosted-model"><option value="free-fast">Fast</option></select>
+                    </label>
+
+                    <label>
+                        <key>Voice:</key>
+                        <select id="hosted-style"><option value="tour">Tour de France</option></select>
+                    </label>
+                </div>
+
                 <p class="help-text" data-provider="compatible" id="compat-hint"></p>
                 <p class="help-text" data-provider="compatible">Model IDs are free text because they change faster than this mod ships &mdash; paste whatever your service currently offers. The cost fields are optional and only drive the spend readout; leave them blank and cost shows as untracked.</p>
+
+                <div class="conn-state" data-provider="hosted">
+                    <span id="hosted-conn-badge" class="conn-badge"></span>
+                    <span id="hosted-conn-text"></span>
+                </div>
 
                 <div class="api-actions" data-provider="hosted">
                     <button type="button" id="hosted-signin-btn">Sign in with Discord</button>
                     <button type="button" id="hosted-connect-btn">Connect anonymously</button>
+                    <button type="button" id="hosted-signout-btn">Sign out</button>
                     <span id="hosted-status"></span>
                 </div>
 
@@ -251,7 +262,6 @@
                 </p>
 
                 <p class="help-text" data-provider="hosted">
-                    <span id="hosted-account"></span><br>
                     <span id="hosted-quota"></span>
                 </p>
 
