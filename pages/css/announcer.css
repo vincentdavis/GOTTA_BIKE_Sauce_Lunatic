@@ -46,6 +46,21 @@ body.solid-background {
     border-radius: 4px;
 }
 
+/* The titlebar auto-hides once the overlay is chromeless in-game, so this bar is
+   the top-left of what a rider actually sees. That makes it the one place a mark
+   is both visible and out of the commentary's way. SVG, not the PNG the titlebar
+   uses: at ~18px the disc needs to stay crisp at any font scale. */
+#brand-logo {
+    width: 1.35em;
+    height: 1.35em;
+    flex: none;
+    display: block;
+    margin-right: 0.1em;
+    /* The bar is translucent over a moving race — a soft edge keeps the disc
+       legible against a bright sky and a dark tunnel alike. */
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+}
+
 /* Two dots and a $. Detail lives in the title attribute — this bar sits on top
    of a bike race, so it earns as few pixels as it can. */
 .status-dot {
@@ -699,8 +714,10 @@ body:not(.transparent-bg) {
         gap: 0.4em;
     }
 
+    /* Stays a row. Four items totalling well under 100px have no width
+       problem, and stacking them would push the commentary down the screen —
+       the opposite of what a narrow overlay wants. */
     #status-bar {
-        flex-direction: column;
-        gap: 0.3em;
+        gap: 0.5em;
     }
 }
