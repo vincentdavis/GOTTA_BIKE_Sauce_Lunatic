@@ -53,11 +53,13 @@ jobs:
           node scripts/overlay-boot-test.mjs
           node scripts/prompt-migration-test.mjs
 
-      - name: Prompt tables agree
+      - name: Prompt tables and library
         # The mod and the service define the same voices in two files that
         # cannot import each other. A comment asking a human to keep them in
-        # sync already failed once; this is what actually holds.
-        run: node scripts/prompt-parity-test.mjs
+        # sync already failed once; the parity test is what actually holds.
+        run: |
+          node scripts/prompt-parity-test.mjs
+          node scripts/prompt-library-test.mjs
 
       - name: Syntax-check the hosted service
         # The service ships separately from the mod zip, but a syntax error

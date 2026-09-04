@@ -6,8 +6,9 @@ import {
     providerFor, presetFor, costFor, streamCompletion, tokenKind
 } from './providers.mjs';
 import {
-    BUILTIN_PROMPTS, DEFAULT_PROMPT_ID, LEGACY_PROMPT_IDS, promptFor, listPrompts
+    BUILTIN_PROMPTS, DEFAULT_PROMPT_ID, promptFor, listPrompts
 } from './prompts.mjs';
+import * as library from './prompt-library.mjs';
 
 // Storage keys (global, shared across windows)
 const ATHLETE_DATA_KEY = '/gotta-bike-sauce-athlete-data';
@@ -51,15 +52,11 @@ function activeProvider() {
 }
 
 /**
- * The voice in use. Legacy ids are mapped rather than defaulted, so a rider who
- * stored 'professional' before the sets were reconciled lands on the same Tour
- * de France prompt they have been hearing, not on whatever is first in the table.
+ * The voice in use — a built-in id, or one of the rider's own. Resolution and
+ * fallback live in prompt-library.mjs; this is just the store-bound wrapper.
  */
 function activePromptId() {
-    const stored = common.settingsStore.get('stylePreset');
-    if (stored === 'custom') return 'custom';
-    const id = LEGACY_PROMPT_IDS[stored] || stored;
-    return BUILTIN_PROMPTS[id] ? id : DEFAULT_PROMPT_ID;
+    return library.activeId(common.settingsStore);
 }
 
 function activeApiKey() {
@@ -260,7 +257,10 @@ migrateLegacySettings();
 export async function lunaticAnnouncerMain() {
     common.initInteractionListeners();
 
-    // Load stored data
+    // Load stored data. The prompt migrations run first and once, so the overlay
+    // uses the same voice the settings window would show -- a rider who never
+    // opens settings after upgrading still gets their own prompt back.
+    library.migratePrompts(common.settingsStore);
     migrateModelSetting();
     loadStoredAthleteData();
     sessionCost = common.settingsStore.get(COST_KEY) || 0;
@@ -436,26 +436,6 @@ function migrateModelSetting() {
     // that all resolved to the same Tour de France prompt. Move them onto the
     // canonical ids so the dropdown matches an option and the hosted and BYOK
     // paths finally name the same thing.
-    // 'hostedStyle' used to be a second, separate voice picker on the AI Provider
-    // tab, because the mod and the service named different voices. Now that they
-    // name the same ones, two settings over one id space could only disagree
-    // silently -- so a hosted-only choice moves onto the shared key. Only when
-    // the shared one is untouched: someone who deliberately picked a voice on the
-    // Prompts tab keeps it.
-    const hosted = common.settingsStore.get('hostedStyle');
-    if (hosted && hosted !== DEFAULT_PROMPT_ID &&
-        BUILTIN_PROMPTS[hosted] &&
-        (common.settingsStore.get('stylePreset') ?? DEFAULT_PROMPT_ID) === DEFAULT_PROMPT_ID) {
-        common.settingsStore.set('stylePreset', hosted);
-    }
-
-    const preset = common.settingsStore.get('stylePreset');
-    if (preset && LEGACY_PROMPT_IDS[preset]) {
-        common.settingsStore.set('stylePreset', LEGACY_PROMPT_IDS[preset]);
-    } else if (preset && preset !== 'custom' && !BUILTIN_PROMPTS[preset]) {
-        console.warn(`[Lunatic] Unknown voice "${preset}" — falling back to ${DEFAULT_PROMPT_ID}`);
-        common.settingsStore.set('stylePreset', DEFAULT_PROMPT_ID);
-    }
 }
 
 /**
@@ -921,19 +901,9 @@ function buildPackText() {
 }
 
 function buildPrompts() {
-    const preset = activePromptId();
-    const isCustom = preset === 'custom';
-    let systemPrompt, userPromptTemplate;
-
-    if (isCustom) {
-        const fallback = promptFor(DEFAULT_PROMPT_ID);
-        systemPrompt = common.settingsStore.get('customSystemPrompt') || fallback.systemPrompt;
-        userPromptTemplate = common.settingsStore.get('customUserPrompt') || fallback.userPromptTemplate;
-    } else {
-        const style = promptFor(preset);
-        systemPrompt = style.systemPrompt;
-        userPromptTemplate = style.userPromptTemplate;
-    }
+    const active = library.resolvePrompt(common.settingsStore);
+    const isOwn = active.kind === 'user';
+    let { systemPrompt, userPromptTemplate } = active;
 
     const ridersText = buildRidersText();
     const watchingText = buildWatchingText();
@@ -979,7 +949,7 @@ function buildPrompts() {
     // this — adding it here too would give hosted and BYOK riders different
     // system prompts for the same voice, which is the divergence this file just
     // stopped having.
-    if (isCustom) {
+    if (isOwn) {
         systemPrompt += '\n\nAnswer in one sentence. Two at most.';
     }
 
@@ -1402,11 +1372,11 @@ async function callClaudeAPI(systemPrompt, userPrompt) {
 
         // Only the hosted adapter reads these; the others ignore the object.
         extra: {
-            // One voice setting for every provider. 'custom' is not a voice the
-            // service knows -- and it discards a client system prompt on the free
-            // tier anyway -- so a rider on their own prompts hears the default
-            // there rather than nothing.
-            style: activePromptId() === 'custom' ? DEFAULT_PROMPT_ID : activePromptId(),
+            // One voice setting for every provider. The service only knows
+            // built-ins -- and discards a client system prompt on the free tier
+            // anyway -- so a rider running their own version of Lunatic hears
+            // Lunatic there rather than the default.
+            style: library.hostedStyleFor(common.settingsStore),
             athleteId: watchingAthlete?.athleteId ?? null
         },
 
@@ -1626,6 +1596,10 @@ export async function lunaticAnnouncerSettingsMain() {
     // Setup tabs
     setupTabs();
 
+    // Both migrations run BEFORE anything reads the active voice: the model one
+    // maps legacy voice ids onto canonical ones, and this moves the old single
+    // custom slot into the library so the picker has it to show.
+    library.migratePrompts(common.settingsStore);
     // Drop any retired/unknown stored model BEFORE the form binds, so the
     // dropdown loads a value that actually matches one of its options.
     migrateModelSetting();
@@ -1635,9 +1609,6 @@ export async function lunaticAnnouncerSettingsMain() {
     await common.initSettingsForm('#display-options')();
     await common.initSettingsForm('#update-options')();
     await common.initSettingsForm('#api-options')();
-    // Voice list must exist before the form binds, or the stored style won't match.
-    populatePromptPicker();
-    await common.initSettingsForm('#prompt-options')();
     // Voice list must exist before the form binds, or the stored voice won't match.
     initTTS();
     await populateVoicePicker();
@@ -1649,7 +1620,7 @@ export async function lunaticAnnouncerSettingsMain() {
     setupProviderControls();
     setupHostedControls();
     setupTestConnection();
-    setupStylePreset();
+    setupPromptLibrary();
     setupDataFields();
     setupCostReset();
 
@@ -1665,13 +1636,18 @@ export async function lunaticAnnouncerSettingsMain() {
     // Listen for settings changes
     common.settingsStore.addEventListener('changed', ev => {
         const changed = ev.data.changed;
-        if (changed.has('stylePreset')) {
-            updateCustomPromptsVisibility();
+        if (changed.has('stylePreset') || changed.has(library.LIBRARY_KEY)) {
+            renderPromptPicker();
+            renderPromptEditor();
+        }
+        // The editor says whether this prompt is what actually gets sent, which
+        // depends on the provider chosen on the other tab.
+        if (PROVIDER_SETTING_KEYS.some(k => changed.has(k))) {
+            renderPromptProviderNote();
         }
     });
 
     // Initial visibility
-    updateCustomPromptsVisibility();
     updateCustomColorVisibility();
 }
 
@@ -1855,7 +1831,7 @@ function renderConnection() {
  * These live OUTSIDE initSettingsForm on purpose. That binder keys on the
  * `name` attribute and loads stored values once at bind time, which suits a
  * fixed form; the preset dropdown has to WRITE two other fields when it
- * changes. setupStylePreset() already manages its controls the same way.
+ * changes. setupPromptLibrary() already manages its controls the same way.
  */
 function setupProviderControls() {
     const providerSel = document.querySelector('select[name="aiProvider"]');
@@ -2111,82 +2087,215 @@ function setupHostedControls() {
     }
 }
 
+// ============================================================================
+// The prompt library
+// ============================================================================
+// Built-in voices are read straight from prompts.mjs and never copied into the
+// rider's settings, so an improved built-in is picked up automatically and a
+// rider's own copy is never rewritten underneath them. Storage rules live in
+// prompt-library.mjs; everything here is the settings tab on top of them.
+
+/** A one-line status under the editor. Errors persist; successes fade. */
+let promptStatusTimer = null;
+
+function setPromptStatus(text, cls = '') {
+    const el = document.getElementById('prompt-status');
+    if (!el) return;
+    clearTimeout(promptStatusTimer);
+    el.textContent = text;
+    el.className = cls;
+    if (text && cls !== 'error') {
+        promptStatusTimer = setTimeout(() => { el.textContent = ''; el.className = ''; }, 4000);
+    }
+}
+
 /**
- * Fill the voice dropdown from the shared table, so it can never list a voice
- * that does not exist or miss one that does — the drift that left Lunatic and
- * Old Pro unreachable on a rider's own key.
+ * Rebuild the dropdown: built-ins first, then the rider's own, in two groups.
  *
- * Must run BEFORE initSettingsForm('#prompt-options') binds, or the stored value
- * matches no option and the binder writes a different one back. Same ordering
- * hazard as populateVoicePicker().
+ * Built from the tables rather than from markup, which is how the mod and the
+ * service drifted apart in the first place -- and now the second group does not
+ * exist until a rider makes it.
  */
-function populatePromptPicker() {
+function renderPromptPicker() {
     const sel = document.getElementById('style-preset');
     if (!sel) return;
     sel.textContent = '';
-    for (const p of listPrompts()) {
-        const opt = document.createElement('option');
-        opt.value = p.id;
-        opt.textContent = `${p.label} — ${p.description}`;
-        sel.append(opt);
+
+    const group = label => {
+        const g = document.createElement('optgroup');
+        g.label = label;
+        sel.append(g);
+        return g;
+    };
+    const option = (parent, value, text) => {
+        const o = document.createElement('option');
+        o.value = value;
+        // textContent, not innerHTML: a rider names these.
+        o.textContent = text;
+        parent.append(o);
+    };
+
+    const builtins = group('Built-in');
+    for (const p of listPrompts()) option(builtins, p.id, p.label);
+
+    const own = library.listUserPrompts(common.settingsStore);
+    if (own.length) {
+        const mine = group('Your prompts');
+        for (const p of own) option(mine, p.id, p.name);
     }
-    const own = document.createElement('option');
-    own.value = 'custom';
-    own.textContent = 'Custom — use your own prompts';
-    sel.append(own);
+
+    sel.value = activePromptId();
 }
 
-function setupStylePreset() {
-    const presetSelect = document.getElementById('style-preset');
-    const systemPrompt = document.getElementById('custom-system-prompt');
-    const userPrompt = document.getElementById('custom-user-prompt');
-    const resetBtn = document.getElementById('reset-prompts-btn');
+/**
+ * Show the selected prompt. One function for both kinds: `readOnly` is the only
+ * thing that differs, so there is no second code path to keep in step.
+ */
+function renderPromptEditor() {
+    const store = common.settingsStore;
+    const p = library.resolvePrompt(store);
+    const el = id => document.getElementById(id);
+    const show = (id, on) => { const n = el(id); if (n) n.hidden = !on; };
 
-    if (presetSelect) {
-        presetSelect.value = activePromptId();
+    const nameInput = el('prompt-name');
+    const sysInput = el('custom-system-prompt');
+    const userInput = el('custom-user-prompt');
+    if (!sysInput) return;                      // not the settings window
 
-        presetSelect.addEventListener('change', () => {
-            common.settingsStore.set('stylePreset', presetSelect.value);
-            updateCustomPromptsVisibility();
-        });
+    if (el('prompt-description')) el('prompt-description').textContent = p.description;
+    if (el('prompt-editor-title')) {
+        el('prompt-editor-title').textContent = p.kind === 'user' ? p.name : `${p.name} — read only`;
     }
+    if (nameInput) nameInput.value = p.kind === 'user' ? p.name : '';
+    sysInput.value = p.systemPrompt;
+    userInput.value = p.userPromptTemplate;
+    // readOnly rather than disabled: a rider must still be able to select the
+    // text of a built-in and copy it out.
+    sysInput.readOnly = p.readOnly;
+    userInput.readOnly = p.readOnly;
 
-    // Load custom prompts
-    if (systemPrompt) {
-        systemPrompt.value = common.settingsStore.get('customSystemPrompt') || '';
-        systemPrompt.addEventListener('change', () => {
-            common.settingsStore.set('customSystemPrompt', systemPrompt.value);
-        });
+    show('prompt-name-row', !p.readOnly);
+    show('prompt-save-btn', !p.readOnly);
+    show('prompt-delete-btn', !p.readOnly);
+    show('prompt-readonly-note', p.readOnly);
+    // Only a copy has something to reset to.
+    show('prompt-revert-btn', !p.readOnly && !!p.from);
+
+    renderPromptProviderNote(p);
+    resetDeleteButton();
+    setPromptStatus('');
+}
+
+/**
+ * Say, next to the editor, whether this prompt is actually what gets sent.
+ *
+ * On the free hosted tier the service substitutes its own system message, so a
+ * rider's own prompt is discarded there. That was buried in help text on two
+ * other tabs; it belongs beside the box they typed it into.
+ */
+function renderPromptProviderNote(p = library.resolvePrompt(common.settingsStore)) {
+    const note = document.getElementById('prompt-provider-note');
+    if (!note) return;
+    const provider = activeProvider().label;
+    if (activeProviderId() !== 'hosted') {
+        note.textContent = `Sent as written, on ${provider}.`;
+        note.className = 'help-text';
+        return;
     }
-
-    if (userPrompt) {
-        userPrompt.value = common.settingsStore.get('customUserPrompt') || '';
-        userPrompt.addEventListener('change', () => {
-            common.settingsStore.set('customUserPrompt', userPrompt.value);
-        });
-    }
-
-    if (resetBtn) {
-        resetBtn.addEventListener('click', () => {
-            // Seed from the voice they were last on, not always Tour: someone
-            // customising off the back of Lunatic wants Lunatic's text.
-            const source = activePromptId();
-            const defaults = promptFor(source === 'custom' ? DEFAULT_PROMPT_ID : source);
-            if (systemPrompt) systemPrompt.value = defaults.systemPrompt;
-            if (userPrompt) userPrompt.value = defaults.userPromptTemplate;
-            common.settingsStore.set('customSystemPrompt', defaults.systemPrompt);
-            common.settingsStore.set('customUserPrompt', defaults.userPromptTemplate);
-        });
+    if (p.kind === 'builtin') {
+        note.textContent = `On ${provider} the service supplies this voice. Same voice, same words.`;
+        note.className = 'help-text';
+    } else {
+        const heard = promptFor(library.hostedStyleFor(common.settingsStore)).label;
+        note.textContent = `On ${provider} the service supplies the announcer's instructions, ` +
+            `so this prompt is not used — you will hear ${heard}. Switch to your own API key on the ` +
+            `AI Provider tab to use it.`;
+        note.className = 'help-text warn';
     }
 }
 
-function updateCustomPromptsVisibility() {
-    const preset = activePromptId();
-    const section = document.querySelector('.custom-prompts-section');
+/** Delete is two clicks, not a dialog: confirm() can be suppressed in Electron. */
+function resetDeleteButton() {
+    const btn = document.getElementById('prompt-delete-btn');
+    if (!btn) return;
+    btn.textContent = 'Delete';
+    btn.dataset.armed = '';
+}
 
-    if (section) {
-        section.classList.toggle('hidden', preset !== 'custom');
+function setupPromptLibrary() {
+    const store = common.settingsStore;
+    const sel = document.getElementById('style-preset');
+    if (!sel) return;                           // not the settings window
+
+    /** Run a library call, refresh the tab, and put any refusal on screen. */
+    const act = (fn, done) => {
+        try {
+            const result = fn();
+            renderPromptPicker();
+            renderPromptEditor();
+            if (done) setPromptStatus(done, 'success');
+            return result;
+        } catch (err) {
+            setPromptStatus(err.message || 'That did not work', 'error');
+            return null;
+        }
+    };
+
+    sel.addEventListener('change', () => {
+        library.setActive(store, sel.value);
+        renderPromptEditor();
+    });
+
+    document.getElementById('prompt-duplicate-btn')?.addEventListener('click', () => {
+        act(() => {
+            const id = library.duplicatePrompt(store, activePromptId());
+            library.setActive(store, id);
+            return id;
+        }, 'Copied — edit it below and save.');
+    });
+
+    document.getElementById('prompt-new-btn')?.addEventListener('click', () => {
+        act(() => {
+            const id = library.newBlankPrompt(store);
+            library.setActive(store, id);
+            return id;
+        }, 'Started a new prompt.');
+    });
+
+    document.getElementById('prompt-delete-btn')?.addEventListener('click', ev => {
+        const btn = ev.currentTarget;
+        if (!btn.dataset.armed) {
+            btn.dataset.armed = '1';
+            btn.textContent = 'Really delete?';
+            setPromptStatus('Click again to delete. This cannot be undone.', 'warn');
+            return;
+        }
+        act(() => library.deletePrompt(store, activePromptId()), 'Deleted.');
+    });
+
+    document.getElementById('prompt-save-btn')?.addEventListener('click', () => {
+        act(() => library.updatePrompt(store, activePromptId(), {
+            name: document.getElementById('prompt-name')?.value,
+            systemPrompt: document.getElementById('custom-system-prompt')?.value,
+            userPromptTemplate: document.getElementById('custom-user-prompt')?.value
+        }), 'Saved.');
+    });
+
+    document.getElementById('prompt-revert-btn')?.addEventListener('click', () => {
+        act(() => library.revertToSource(store, activePromptId()), 'Reset to the original.');
+    });
+
+    // Typing arms Save and disarms Delete: a half-typed prompt should not be one
+    // stray click from being thrown away.
+    for (const id of ['prompt-name', 'custom-system-prompt', 'custom-user-prompt']) {
+        document.getElementById(id)?.addEventListener('input', () => {
+            resetDeleteButton();
+            setPromptStatus('Unsaved changes', 'warn');
+        });
     }
+
+    renderPromptPicker();
+    renderPromptEditor();
 }
 
 function updateCustomColorVisibility() {

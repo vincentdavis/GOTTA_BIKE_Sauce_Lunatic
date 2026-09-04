@@ -18,6 +18,7 @@ pages/announcer.html       overlay window
 pages/announcer-settings.html  settings (Settings/API/Prompts/Data/Help tabs)
 pages/src/announcer.mjs    all logic (~1900 lines)
 pages/src/prompts.mjs      the built-in announcer voices (leaf module)
+pages/src/prompt-library.mjs   the rider's own prompts; takes the store as an argument
 pages/css/announcer.css    styles
 pages/images/logo.svg      source of truth for the logo; PNGs are rendered from it
 scripts/lib/stub-dom.mjs   a DOM + Sauce `common` small enough to boot the mod in Node
@@ -25,6 +26,7 @@ scripts/settings-boot-test.mjs  boots the settings window
 scripts/overlay-boot-test.mjs   boots the overlay, incl. the ~1Hz nearby handler
 scripts/prompt-migration-test.mjs  legacy voice ids land where they should
 scripts/prompt-parity-test.mjs     the mod and the service define the same voices
+scripts/prompt-library-test.mjs    the library's storage rules, driven directly
 ```
 
 Run **both** boot tests after touching `announcer.mjs`. They are the only things
@@ -68,8 +70,18 @@ Both HTML files import the same module and call different entry points:
   the other and the table is written twice. `scripts/prompt-parity-test.mjs` is what
   enforces it — a comment asking a human to do it already failed silently, leaving
   three of four voices reachable on only one side.
-- There is **one** voice setting, `stylePreset`, for every provider. `hostedStyle` is
-  a migrated-away legacy key; do not write it.
+- There is **one** voice setting, `stylePreset`, for every provider. It holds either a
+  built-in id or a `usr-` library id. `hostedStyle` and `customSystemPrompt` /
+  `customUserPrompt` are migrated-away legacy keys: never write them, and never delete
+  them either — they are what a downgrade reads.
+- **Built-in prompts are never copied into a rider's settings.** The mod reads their
+  text from `prompts.mjs` every time, so improving one is automatic and a rider's own
+  copy is never rewritten underneath them. Only what a rider wrote is stored.
+- **Every prompt migration lives in `migratePrompts()`, behind one flag, and runs
+  once** — in *both* entry points. Two of them once sat in `migrateModelSetting()`,
+  which runs on every window open; that would have reimposed an old hosted voice any
+  time a rider returned to the default, and wiped a `usr-` id the day the library
+  landed. `activeId()` already falls back at read time, so nothing needs re-running.
 - Keys with a leading `/` are **global and shared across all mods** on the Sauce
   origin. That is why `ATHLETE_DATA_KEY` can read GOTTA.BIKE's imported data, and
   why our own counters must NOT reuse GOTTA's key strings.
@@ -94,6 +106,8 @@ Both HTML files import the same module and call different entry points:
 '/gotta-bike-lunatic-session-cost'   // shared cost counter
 '/gotta-bike-lunatic-total-calls'    // shared call counter
 '/gotta-bike-lunatic-migrated'       // one-time migration flag
+'promptLibrary'                      // per-window: the rider's own prompts
+'promptLibraryMigrated'              // per-window: prompt migrations ran
 '/gotta-bike-sauce-athlete-data'     // READ-ONLY, written by GOTTA.BIKE sauce
 'lunatic-announcer-settings-v1'      // per-window bag (data-settings-key)
 ```

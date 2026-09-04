@@ -128,18 +128,6 @@ ${SHARED_RULES}`,
 
 export const DEFAULT_PROMPT_ID = 'tour';
 
-/**
- * Stored ids that no longer name a voice. Kept as a table rather than folded
- * into a fallback so the migration is legible and reversible: 'professional',
- * 'casual' and 'dramatic' were three settings values that all resolved to the
- * same Tour de France prompt.
- */
-export const LEGACY_PROMPT_IDS = {
-    professional: 'tour',
-    casual: 'tour',
-    dramatic: 'tour'
-};
-
 export function promptFor(id) {
     return BUILTIN_PROMPTS[id] || BUILTIN_PROMPTS[DEFAULT_PROMPT_ID];
 }

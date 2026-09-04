@@ -584,15 +584,80 @@ body:not(.transparent-bg) {
 
 .prompt-actions {
     margin-top: 1em;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5em;
 }
 
-/* Custom prompts section - shown/hidden based on preset */
-.custom-prompts-section {
-    display: block;
+/* .secondary-btn carries a margin-top for the stacked layout it was written
+   for; inside a flex row the gap does that job. */
+.prompt-actions .secondary-btn,
+.prompt-actions .primary-btn {
+    margin-top: 0;
 }
 
-.custom-prompts-section.hidden {
-    display: none;
+.primary-btn {
+    padding: 0.4em 0.9em;
+    border: 1px solid #2f7fd0;
+    border-radius: 4px;
+    background: #2196f3;
+    color: #fff;
+    cursor: pointer;
+    font-size: 0.85em;
+    font-weight: 500;
+}
+
+.primary-btn:hover { background: #3aa5ff; }
+
+/* Delete is destructive, and it arms on the first click -- so it reads as
+   ordinary until it is actually dangerous. */
+.secondary-btn.danger:hover {
+    background: #6b2f28;
+    border-color: #a2483c;
+}
+
+.secondary-btn.danger[data-armed="1"] {
+    background: #8c3529;
+    border-color: #d75a44;
+}
+
+/* Buttons hidden by renderPromptEditor(). Same !important reasoning as the
+   provider rows below: these sit in a flex row the settings stylesheet lays
+   out, and `display:flex` on a parent would otherwise beat [hidden]. */
+.prompt-actions button[hidden],
+#prompt-name-row[hidden],
+.help-text[hidden] {
+    display: none !important;
+}
+
+/* A read-only built-in should look read-only, not merely refuse to type. */
+.prompt-group textarea[readonly] {
+    background: #2a2a2a;
+    color: #b8b8b8;
+    border-style: dashed;
+}
+
+.prompt-group textarea[readonly]:focus {
+    border-color: #555;
+}
+
+#prompt-name-row input {
+    width: 100%;
+    max-width: 26em;
+}
+
+#prompt-status {
+    font-size: 0.85em;
+    color: #888;
+}
+
+#prompt-status.success { color: #52c07a; }
+#prompt-status.error { color: #d75a44; }
+#prompt-status.warn { color: #e0a33a; }
+
+.help-text.warn {
+    color: #e0a33a;
 }
 
 /* Provider-specific settings rows. setupProviderControls() toggles .hidden on

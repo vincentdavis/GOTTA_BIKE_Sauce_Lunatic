@@ -63,7 +63,7 @@ export const listeners = [];
 export function makeEl(tag = 'div', data = {}) {
     const el = {
         tagName: String(tag).toUpperCase(),
-        textContent: '', innerHTML: '', className: '', title: '',
+        className: '', title: '', label: '',
         value: '', hidden: false, disabled: false, checked: false, href: '', type: '',
         dataset: { ...data },
         style: { setProperty() {}, removeProperty() {}, getPropertyValue: () => '' },
@@ -91,13 +91,35 @@ export function makeEl(tag = 'div', data = {}) {
             toggle: (c, on) => { on ? el._classes.add(c) : el._classes.delete(c); return !!on; }
         }
     };
+
+    // textContent and innerHTML REPLACE an element's contents. `el.textContent
+    // = ''` is the ordinary way to empty a container, and a plain field would
+    // let a rebuild silently append instead -- so a test would pass while the
+    // real page grew duplicate options on every render.
+    let text = '';
+    let html = '';
+    Object.defineProperty(el, 'textContent', {
+        get: () => text,
+        set: v => { text = String(v); html = ''; el.children.length = 0; },
+        enumerable: true
+    });
+    Object.defineProperty(el, 'innerHTML', {
+        get: () => html,
+        set: v => { html = String(v); text = ''; el.children.length = 0; },
+        enumerable: true
+    });
     return el;
 }
 
 /** Fire the handler a test cares about, e.g. fire(sel, 'change'). */
 export function fire(el, type) {
     const found = listeners.filter(l => l.el === el && l.t === type);
-    for (const l of found) l.fn({ target: el, preventDefault() {}, stopPropagation() {} });
+    for (const l of found) {
+        // currentTarget as well as target: a handler bound directly to an
+        // element reads currentTarget, and leaving it undefined would throw
+        // only in the test, which is the wrong place for a difference.
+        l.fn({ target: el, currentTarget: el, preventDefault() {}, stopPropagation() {} });
+    }
     return found.length;
 }
 

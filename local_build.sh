@@ -31,6 +31,7 @@ node scripts/settings-boot-test.mjs > /dev/null
 node scripts/overlay-boot-test.mjs > /dev/null
 node scripts/prompt-migration-test.mjs > /dev/null
 node scripts/prompt-parity-test.mjs > /dev/null
+node scripts/prompt-library-test.mjs > /dev/null
 
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"

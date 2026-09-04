@@ -320,34 +320,46 @@
         <div class="settings-content">
             <section class="settings-section">
                 <h2>Commentary Style</h2>
-                <p class="help-text">Every voice here works on your own API key <em>and</em> on the
-                    free hosted service. Pick one on this tab and it applies to whichever provider
-                    you are using.</p>
+                <p class="help-text">One voice setting, for whichever provider you are using.</p>
 
-                <form id="prompt-options">
-                    <label>
-                        <key>Style preset:</key>
-                        <!-- Filled by populatePromptPicker() from the shared prompt
-                             table. A hardcoded list here is what let the mod and the
-                             service drift apart in the first place. -->
-                        <select name="stylePreset" id="style-preset"></select>
-                    </label>
-                </form>
+                <label>
+                    <key>Voice:</key>
+                    <!-- Filled by renderPromptPicker(). Deliberately outside a
+                         form: the options are the rider's library, so
+                         initSettingsForm would bind a list that does not exist
+                         yet and write back a value matching no option. -->
+                    <select id="style-preset"></select>
+                </label>
+
+                <p class="help-text" id="prompt-description"></p>
+                <p class="help-text" id="prompt-provider-note"></p>
+
+                <div class="prompt-actions">
+                    <button type="button" id="prompt-duplicate-btn" class="secondary-btn">Duplicate &amp; edit</button>
+                    <button type="button" id="prompt-new-btn" class="secondary-btn">New from blank</button>
+                    <button type="button" id="prompt-delete-btn" class="secondary-btn danger">Delete</button>
+                </div>
             </section>
 
-            <section class="settings-section custom-prompts-section">
-                <h2>Custom Prompts</h2>
-                <p class="help-text">Customize the system and user messages sent to Claude. Only used when "Custom" style is selected.</p>
+            <section class="settings-section">
+                <h2 id="prompt-editor-title">The prompt</h2>
+                <p class="help-text" id="prompt-readonly-note">Built-in voices cannot be edited. Use
+                    <strong>Duplicate &amp; edit</strong> to make a version of your own.</p>
+
+                <label id="prompt-name-row">
+                    <key>Name:</key>
+                    <input type="text" id="prompt-name" maxlength="60" autocomplete="off"/>
+                </label>
 
                 <div class="prompt-group">
-                    <label class="prompt-label">System Message:</label>
-                    <textarea id="custom-system-prompt" name="customSystemPrompt" rows="6"
+                    <label class="prompt-label" for="custom-system-prompt">System message:</label>
+                    <textarea id="custom-system-prompt" rows="12"
                               placeholder="You are a cycling race commentator..."></textarea>
                 </div>
 
                 <div class="prompt-group">
-                    <label class="prompt-label">User Message Template:</label>
-                    <textarea id="custom-user-prompt" name="customUserPrompt" rows="6"
+                    <label class="prompt-label" for="custom-user-prompt">User message template:</label>
+                    <textarea id="custom-user-prompt" rows="8"
                               placeholder="Provide commentary on the current race situation..."></textarea>
                     <p class="prompt-help">Placeholders: <code>{riders}</code> the field in road order,
                         <code>{watching}</code> the watched athlete, <code>{raceContext}</code> distance to go
@@ -356,7 +368,9 @@
                 </div>
 
                 <div class="prompt-actions">
-                    <button type="button" id="reset-prompts-btn" class="secondary-btn">Reset to Default</button>
+                    <button type="button" id="prompt-save-btn" class="primary-btn">Save</button>
+                    <button type="button" id="prompt-revert-btn" class="secondary-btn">Reset to source</button>
+                    <span id="prompt-status"></span>
                 </div>
             </section>
         </div>
@@ -530,6 +544,28 @@
                 <strong>Old Pro</strong>, a retired rider in the second chair; and
                 <strong>Tactical Coach</strong>, which is not commentary at all but a directeur on the
                 radio telling you what to do about it.</p>
+            </section>
+
+            <section class="settings-section">
+                <h2>Writing your own</h2>
+                <p>The built-in voices are read-only, but you can keep as many of your own as you like
+                (up to twenty). On the <strong>Prompts</strong> tab:</p>
+                <ul>
+                    <li><strong>Duplicate &amp; edit</strong> copies the voice you are on, so you start
+                        from something that already works rather than a blank page. It remembers where
+                        it came from, and <strong>Reset to source</strong> puts it back.</li>
+                    <li><strong>New from blank</strong> starts a prompt with no source.</li>
+                    <li>Edit, name it, and <strong>Save</strong>. Yours appear in the same Voice
+                        dropdown, under <em>Your prompts</em>.</li>
+                </ul>
+                <p>The <strong>system message</strong> sets who the announcer is and the rules they
+                follow. The <strong>user message template</strong> is the race data, and the
+                placeholders listed under it are filled in each time. Leave a placeholder out and the
+                mod appends that block anyway rather than dropping the data.</p>
+                <p>Improving a built-in voice never touches a copy you made — your words are yours.
+                One caveat: on the free hosted service your own prompt is <em>not</em> used, because
+                the service supplies the announcer's instructions there. Use your own API key to hear
+                what you wrote.</p>
             </section>
 
             <section class="settings-section">
