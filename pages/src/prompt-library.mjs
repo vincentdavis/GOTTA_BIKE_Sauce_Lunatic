@@ -24,6 +24,15 @@ export const LIBRARY_KEY = 'promptLibrary';
 export const ACTIVE_KEY = 'stylePreset';
 
 /**
+ * Improved built-in voices fetched from the service, cached locally.
+ *
+ * `prompts.mjs` stays the BUNDLED FLOOR: if this cache is empty, invalid, or
+ * the service has never been reachable, the mod runs on the voices it shipped
+ * with. Nothing here is required for the mod to work.
+ */
+export const CACHE_KEY = 'builtinPrompts';
+
+/**
  * Bounds, because this is localStorage behind Sauce's settingsStore and a
  * settings bag that will not serialize takes every other setting down with it.
  * Both are enforced on save with a message a person can act on, never silently.
@@ -31,6 +40,94 @@ export const ACTIVE_KEY = 'stylePreset';
 export const MAX_USER_PROMPTS = 20;
 export const MAX_PROMPT_CHARS = 16000;
 export const MAX_NAME_CHARS = 60;
+
+/**
+ * Whether one fetched voice is fit to send.
+ *
+ * This text goes into a rider's OWN paid API call, so it is validated as
+ * untrusted input even though it comes from our own service: a truncated
+ * response, a proxy that rewrote the body, or a half-written deploy should
+ * leave the bundled voice in place rather than send something broken to
+ * Anthropic on someone else's bill.
+ *
+ * Deliberately not a schema check of the whole payload: one bad entry is
+ * dropped and the rest are kept, because a new voice with a typo should not
+ * cost everyone the improved ones alongside it.
+ */
+function validBuiltin(p) {
+    if (!p || typeof p !== 'object') return false;
+    if (typeof p.id !== 'string' || !/^[a-z][a-z0-9-]{0,39}$/.test(p.id)) return false;
+    // A 'usr-' id from the service would collide with a rider's own prompts.
+    if (isUserPromptId(p.id)) return false;
+    if (!Number.isInteger(p.version) || p.version < 1) return false;
+    for (const f of ['label', 'description']) {
+        if (typeof p[f] !== 'string' || !p[f].trim() || p[f].length > 200) return false;
+    }
+    for (const f of ['systemPrompt', 'userPromptTemplate']) {
+        if (typeof p[f] !== 'string' || !p[f].trim() || p[f].length > MAX_PROMPT_CHARS) return false;
+    }
+    return true;
+}
+
+/** The cached payload, or null if there is nothing usable stored. */
+export function readCache(store) {
+    const raw = store.get(CACHE_KEY);
+    if (!raw || typeof raw !== 'object' || !Array.isArray(raw.data)) return null;
+    const items = {};
+    for (const p of raw.data) {
+        if (validBuiltin(p)) {
+            items[p.id] = {
+                version: p.version,
+                label: p.label,
+                description: p.description,
+                systemPrompt: p.systemPrompt,
+                userPromptTemplate: p.userPromptTemplate,
+                changelog: typeof p.changelog === 'string' ? p.changelog : ''
+            };
+        }
+    }
+    if (!Object.keys(items).length) return null;
+    return {
+        items,
+        revision: String(raw.revision || ''),
+        etag: String(raw.etag || ''),
+        fetchedAt: Number(raw.fetchedAt) || 0
+    };
+}
+
+/**
+ * The built-in voices actually in force: what the service last sent, over what
+ * the mod shipped with.
+ *
+ * A bundled voice the service no longer lists is KEPT. Removing it would break
+ * a rider who is on it, for no gain -- and the service dropping a voice is far
+ * more likely to be a half-configured deploy than a deliberate retirement.
+ */
+export function builtins(store) {
+    const cached = readCache(store);
+    if (!cached) return BUILTIN_PROMPTS;
+    return { ...BUILTIN_PROMPTS, ...cached.items };
+}
+
+export function builtinFor(store, id) {
+    const table = builtins(store);
+    return table[id] || table[DEFAULT_PROMPT_ID] || promptFor(DEFAULT_PROMPT_ID);
+}
+
+/** Built-ins for the picker, in the bundled order with new arrivals appended. */
+export function listBuiltins(store) {
+    const table = builtins(store);
+    const ordered = [
+        ...Object.keys(BUILTIN_PROMPTS),
+        ...Object.keys(table).filter(id => !BUILTIN_PROMPTS[id])
+    ];
+    return ordered.map(id => ({
+        id,
+        version: table[id].version,
+        label: table[id].label,
+        description: table[id].description
+    }));
+}
 
 /** Thrown for anything a rider can fix by typing something different. */
 export class PromptError extends Error {}
@@ -67,7 +164,7 @@ export function readLibrary(store) {
                 name: String(p.name || 'Untitled'),
                 systemPrompt: String(p.systemPrompt || ''),
                 userPromptTemplate: String(p.userPromptTemplate || ''),
-                from: p.from && BUILTIN_PROMPTS[p.from.id]
+                from: p.from && builtins(store)[p.from.id]
                     ? { id: p.from.id, version: Number(p.from.version) || 1 }
                     : null,
                 updatedAt: Number(p.updatedAt) || 0
@@ -91,7 +188,7 @@ export function listUserPrompts(store) {
 export function activeId(store) {
     const stored = store.get(ACTIVE_KEY);
     if (isUserPromptId(stored) && readLibrary(store).items[stored]) return stored;
-    if (BUILTIN_PROMPTS[stored]) return stored;
+    if (builtins(store)[stored]) return stored;
     return DEFAULT_PROMPT_ID;
 }
 
@@ -106,15 +203,16 @@ export function resolvePrompt(store, id = activeId(store)) {
             id, kind: 'user', readOnly: false,
             name: own.name,
             description: own.from
-                ? `Your own, started from ${promptFor(own.from.id).label}.`
+                ? `Your own, started from ${builtinFor(store, own.from.id).label}.`
                 : 'Your own, written from scratch.',
             systemPrompt: own.systemPrompt,
             userPromptTemplate: own.userPromptTemplate,
             from: own.from
         };
     }
-    const builtin = promptFor(id);
-    const builtinId = BUILTIN_PROMPTS[id] ? id : DEFAULT_PROMPT_ID;
+    const table = builtins(store);
+    const builtinId = table[id] ? id : DEFAULT_PROMPT_ID;
+    const builtin = table[builtinId] || promptFor(DEFAULT_PROMPT_ID);
     return {
         id: builtinId, kind: 'builtin', readOnly: true,
         name: builtin.label,
@@ -172,8 +270,8 @@ export function createPrompt(store, { name, systemPrompt, userPromptTemplate, fr
     items[id] = {
         id, name: clean,
         systemPrompt: String(systemPrompt),
-        userPromptTemplate: String(userPromptTemplate || promptFor(DEFAULT_PROMPT_ID).userPromptTemplate),
-        from: from && BUILTIN_PROMPTS[from.id] ? { id: from.id, version: from.version } : null,
+        userPromptTemplate: String(userPromptTemplate || builtinFor(store, DEFAULT_PROMPT_ID).userPromptTemplate),
+        from: from && builtins(store)[from.id] ? { id: from.id, version: from.version } : null,
         updatedAt: Date.now()
     };
     write(store, items);
@@ -206,7 +304,7 @@ export function duplicatePrompt(store, sourceId) {
         // Provenance follows the original built-in through a chain of copies, so
         // "reset to source" still means something two duplicates deep.
         from: src.kind === 'builtin'
-            ? { id: src.id, version: BUILTIN_PROMPTS[src.id].version }
+            ? { id: src.id, version: builtinFor(store, src.id).version }
             : src.from
     });
 }
@@ -220,7 +318,7 @@ export function newBlankPrompt(store) {
         // Not empty: an empty system message is rejected by validate(), and a
         // blank page is a worse start than one line to replace.
         systemPrompt: 'You are a live bike-race commentator. One sentence, occasionally two.',
-        userPromptTemplate: promptFor(DEFAULT_PROMPT_ID).userPromptTemplate,
+        userPromptTemplate: builtinFor(store, DEFAULT_PROMPT_ID).userPromptTemplate,
         from: null
     });
 }
@@ -244,7 +342,9 @@ export function revertToSource(store, id) {
     const own = readLibrary(store).items[id];
     if (!own) throw new PromptError('That prompt no longer exists.');
     if (!own.from) throw new PromptError('This prompt was written from scratch — there is no source to reset to.');
-    const src = promptFor(own.from.id);
+    // Reset to the CURRENT source, not the version they copied: "reset" means
+    // "give me the real one", and the improved text is the real one.
+    const src = builtinFor(store, own.from.id);
     return updatePrompt(store, id, {
         systemPrompt: src.systemPrompt,
         userPromptTemplate: src.userPromptTemplate,
@@ -285,7 +385,7 @@ export function migratePrompts(store) {
     //    when the mod and the service named different voices. A hosted-only
     //    choice moves onto the shared key -- but never over a deliberate one.
     const hosted = store.get('hostedStyle');
-    if (hosted && hosted !== DEFAULT_PROMPT_ID && BUILTIN_PROMPTS[hosted] &&
+    if (hosted && hosted !== DEFAULT_PROMPT_ID && builtins(store)[hosted] &&
         (store.get(ACTIVE_KEY) ?? DEFAULT_PROMPT_ID) === DEFAULT_PROMPT_ID) {
         setActive(store, hosted);
     }
@@ -313,7 +413,7 @@ export function migratePrompts(store) {
         id = createPrompt(store, {
             name: 'My prompt',
             systemPrompt: system,
-            userPromptTemplate: user || promptFor(DEFAULT_PROMPT_ID).userPromptTemplate,
+            userPromptTemplate: user || builtinFor(store, DEFAULT_PROMPT_ID).userPromptTemplate,
             from: null
         });
     } catch (err) {

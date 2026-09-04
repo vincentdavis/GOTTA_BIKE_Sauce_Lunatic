@@ -121,6 +121,30 @@ fire(del, 'click');
 check('two clicks delete', groups().length === 1, JSON.stringify(groups().map(g => g.label)));
 check('and fall back to a built-in', picker.value === 'tour', picker.value);
 
+section('the update check does not get in the way');
+// installGlobals() makes fetch throw, so this is the offline case: the settings
+// window has to open regardless, and nothing may be left half-rendered.
+check('the picker is still populated', groups()[0].values.includes('tour'));
+check('no notice, because nothing was fetched', el('prompt-notice').hidden);
+check('the off switch reflects the default', el('prompt-updates').value === 'auto',
+    el('prompt-updates').value);
+
+section('a pending notice is shown, and dismissible');
+settingsStore.set('promptUpdateNotice', {
+    updated: [{ id: 'lunatic', label: 'Lunatic', from: 1, to: 2 }],
+    added: [{ id: 'velodrome', label: 'Velodrome' }]
+});
+settingsStore.set('builtinPrompts', { data: [], revision: 'x' });   // triggers a re-render
+check('the notice appears', !el('prompt-notice').hidden);
+check('naming both changes',
+    /Lunatic/.test(el('prompt-notice-text').textContent) &&
+    /Velodrome/.test(el('prompt-notice-text').textContent),
+    el('prompt-notice-text').textContent);
+check('and saying your own are safe', /unchanged/.test(el('prompt-notice-text').textContent));
+fire(el('prompt-notice-dismiss'), 'click');
+check('dismiss hides it', el('prompt-notice').hidden);
+check('and it stays dismissed', settingsStore.get('promptUpdateNotice') === null);
+
 section('the voice picker resolves without waiting out its timeout');
 const ttsSel = el('tts-voice');
 check('voices are listed', ttsSel.children.length === 2, `${ttsSel.children.length} option(s)`);

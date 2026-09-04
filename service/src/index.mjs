@@ -9,6 +9,8 @@
  *   POST /v1/device            mint an anonymous device token
  *   GET  /v1/models            the free model aliases that are actually usable
  *   GET  /v1/styles            the announcer voices this service provides
+ *   GET  /v1/prompts           those voices in full, for clients that build
+ *                              their own request (ETag + 304)
  *   GET  /v1/quota             remaining allowance, without spending a call
  *   POST /v1/chat/completions  the commentary call (SSE by default)
  *   GET  /healthz              liveness plus the two facts an operator needs
@@ -28,7 +30,7 @@ import {
     startPairing, pollPairing, discordAuthorizeUrl, handleDiscordCallback,
     successPage, errorPage
 } from './discord.mjs';
-import { styleFor, listStyles, DEFAULT_STYLE } from './styles.mjs';
+import { styleFor, listStyles, listPromptDefinitions, promptsRevision, DEFAULT_STYLE } from './styles.mjs';
 import { callUpstream, UpstreamError } from './upstream.mjs';
 
 const MAX_BODY_BYTES = 256 * 1024;
@@ -45,8 +47,11 @@ function accountsUnavailableReason() {
 function corsHeaders() {
     return {
         'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
-        'Access-Control-Allow-Headers': 'content-type, authorization, x-lunatic-athlete',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'content-type, authorization, x-lunatic-athlete, if-none-match',
+        'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+        // Without this the browser hides ETag from the page and every prompt
+        // check re-downloads the table instead of getting a 304.
+        'Access-Control-Expose-Headers': 'etag',
         'Access-Control-Max-Age': '86400'
     };
 }
@@ -325,6 +330,51 @@ const server = createServer(async (req, res) => {
 
         if (req.method === 'GET' && path === '/v1/styles') {
             return json(res, 200, { object: 'list', default: DEFAULT_STYLE, data: listStyles() });
+        }
+
+        /**
+         * The full prompt definitions, for clients that build their own request.
+         *
+         * A Sauce mod only updates when a rider downloads a new zip, so without
+         * this an improved voice never reaches anyone already using their own
+         * API key. Hosted riders need nothing here: the service substitutes the
+         * system prompt at call time, so they are already current.
+         *
+         * Unauthenticated on purpose. Requiring a token would mean a rider who
+         * chose NOT to use the hosted service had to connect to it anyway.
+         */
+        if ((req.method === 'GET' || req.method === 'HEAD') && path === '/v1/prompts') {
+            const revision = promptsRevision();
+            const etag = `"${revision}"`;
+            // Both forms: a browser may send the value back verbatim or, on a
+            // 304 revalidation, wrapped as a weak validator.
+            const seen = String(req.headers['if-none-match'] || '')
+                .split(',').map(v => v.trim().replace(/^W\//, ''));
+            if (seen.includes(etag)) {
+                res.writeHead(304, { ETag: etag, 'Cache-Control': 'no-cache', ...corsHeaders() });
+                return res.end();
+            }
+            const payload = {
+                object: 'list',
+                revision,
+                default: DEFAULT_STYLE,
+                data: listPromptDefinitions()
+            };
+            // HEAD gets the validator and the length, and no body: it is the
+            // natural way for a monitor to ask "has this changed" without
+            // pulling ~10KB of prompt text.
+            if (req.method === 'HEAD') {
+                const body = JSON.stringify(payload);
+                res.writeHead(200, {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(body),
+                    ETag: etag,
+                    'Cache-Control': 'no-cache',
+                    ...corsHeaders()
+                });
+                return res.end();
+            }
+            return json(res, 200, payload, { ETag: etag, 'Cache-Control': 'no-cache' });
         }
 
         if (req.method === 'GET' && path === '/v1/quota') {

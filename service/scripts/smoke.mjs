@@ -112,6 +112,40 @@ const { body: styles } = await get('/v1/styles');
 if ((styles.data || []).length) pass('voices offered', styles.data.map(s => s.id).join(', '));
 else fail('voices offered', 'none');
 
+// --- full prompt definitions -----------------------------------------------
+// What a rider on their OWN API key fetches. If this is wrong, the mod keeps
+// working -- it falls back to the voices in its zip -- but improved wording
+// reaches nobody, silently, which is exactly the failure worth a smoke check.
+const { res: pRes, body: prompts } = await get('/v1/prompts');
+const defs = prompts.data || [];
+if (!defs.length) {
+    fail('prompt definitions served', 'none');
+} else {
+    const incomplete = defs.filter(p =>
+        !p.id || !p.version || !p.systemPrompt?.trim() || !p.userPromptTemplate?.trim());
+    if (incomplete.length) {
+        fail('prompt definitions served', `incomplete: ${incomplete.map(p => p.id || '?').join(', ')}`);
+    } else {
+        pass('prompt definitions served', `${defs.length} complete`);
+    }
+    const sameAsStyles = defs.length === (styles.data || []).length;
+    if (sameAsStyles) pass('/v1/prompts and /v1/styles agree');
+    else fail('/v1/prompts and /v1/styles agree', `${defs.length} vs ${(styles.data || []).length}`);
+}
+
+const etag = pRes.headers.get('etag');
+if (etag) {
+    pass('prompt table has an ETag', etag);
+    // Without the 304 every mod re-downloads ~10KB daily instead of nothing.
+    const { res: cond } = await get('/v1/prompts', { headers: { 'If-None-Match': etag } });
+    if (cond.status === 304) pass('unchanged prompts return 304');
+    else fail('unchanged prompts return 304', `got ${cond.status}`);
+} else {
+    // Not fatal, but it means every client refetches the whole table daily --
+    // and a proxy stripping the header looks exactly like this.
+    warn('prompt table has an ETag', 'no ETag header; clients cannot revalidate');
+}
+
 // --- auth ------------------------------------------------------------------
 const { body: dev } = await get('/v1/device', { method: 'POST' });
 if (typeof dev.token === 'string' && dev.token.startsWith('lun_')) pass('device token minted');

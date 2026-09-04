@@ -9,6 +9,7 @@ import {
     BUILTIN_PROMPTS, DEFAULT_PROMPT_ID, promptFor, listPrompts
 } from './prompts.mjs';
 import * as library from './prompt-library.mjs';
+import * as promptUpdates from './prompt-updates.mjs';
 
 // Storage keys (global, shared across windows)
 const ATHLETE_DATA_KEY = '/gotta-bike-sauce-athlete-data';
@@ -1636,9 +1637,11 @@ export async function lunaticAnnouncerSettingsMain() {
     // Listen for settings changes
     common.settingsStore.addEventListener('changed', ev => {
         const changed = ev.data.changed;
-        if (changed.has('stylePreset') || changed.has(library.LIBRARY_KEY)) {
+        if (changed.has('stylePreset') || changed.has(library.LIBRARY_KEY) ||
+            changed.has(library.CACHE_KEY)) {
             renderPromptPicker();
             renderPromptEditor();
+            renderPromptNotice();
         }
         // The editor says whether this prompt is what actually gets sent, which
         // depends on the provider chosen on the other tab.
@@ -2136,7 +2139,9 @@ function renderPromptPicker() {
     };
 
     const builtins = group('Built-in');
-    for (const p of listPrompts()) option(builtins, p.id, p.label);
+    // The merged table: what the service last sent, over what the mod shipped
+    // with. A voice added since this zip was built belongs in the list.
+    for (const p of library.listBuiltins(common.settingsStore)) option(builtins, p.id, p.label);
 
     const own = library.listUserPrompts(common.settingsStore);
     if (own.length) {
@@ -2222,6 +2227,40 @@ function resetDeleteButton() {
     btn.dataset.armed = '';
 }
 
+/**
+ * The "a voice was improved" line at the top of the Prompts tab.
+ *
+ * A line on the tab a rider is already looking at, dismissible, and nothing in
+ * the overlay -- an announcer changing wording is news, not an interruption
+ * mid-race.
+ */
+function renderPromptNotice() {
+    const box = document.getElementById('prompt-notice');
+    const text = document.getElementById('prompt-notice-text');
+    if (!box || !text) return;
+    const notice = promptUpdates.pendingNotice(common.settingsStore);
+    box.hidden = !notice;
+    text.textContent = notice ? promptUpdates.describeNotice(notice) : '';
+}
+
+/**
+ * Ask the service whether the built-in voices have moved on.
+ *
+ * Deliberately not awaited by the caller: the settings window must open at once
+ * whether the service answers in 50ms, in six seconds, or never. Whatever comes
+ * back re-renders what is already on screen.
+ */
+function checkPromptUpdates() {
+    promptUpdates.checkForUpdates(common.settingsStore)
+        .then(result => {
+            if (result.status !== 'updated') return;
+            renderPromptPicker();
+            renderPromptEditor();
+            renderPromptNotice();
+        })
+        .catch(err => console.warn('[Lunatic] prompt update check failed:', err));
+}
+
 function setupPromptLibrary() {
     const store = common.settingsStore;
     const sel = document.getElementById('style-preset');
@@ -2294,8 +2333,26 @@ function setupPromptLibrary() {
         });
     }
 
+    document.getElementById('prompt-notice-dismiss')?.addEventListener('click', () => {
+        promptUpdates.dismissNotice(store);
+        renderPromptNotice();
+    });
+
+    const updatesSel = document.getElementById('prompt-updates');
+    if (updatesSel) {
+        updatesSel.value = promptUpdates.updatesEnabled(store) ? 'auto' : 'off';
+        updatesSel.addEventListener('change', () => {
+            common.settingsStore.set(promptUpdates.UPDATES_KEY, updatesSel.value);
+            if (updatesSel.value === 'auto') checkPromptUpdates();
+        });
+    }
+
     renderPromptPicker();
     renderPromptEditor();
+    renderPromptNotice();
+    // Fire and forget. Cached-then-refresh: the tab is already correct from the
+    // cache, and a check that lands later re-renders it.
+    checkPromptUpdates();
 }
 
 function updateCustomColorVisibility() {

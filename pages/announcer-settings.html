@@ -322,6 +322,14 @@
                 <h2>Commentary Style</h2>
                 <p class="help-text">One voice setting, for whichever provider you are using.</p>
 
+                <!-- Shown by renderPromptNotice() after the service sends an
+                     improved or new voice. Never a dialog and never in the
+                     overlay: this is news, not an interruption. -->
+                <div id="prompt-notice" class="prompt-notice" hidden>
+                    <span id="prompt-notice-text"></span>
+                    <button type="button" id="prompt-notice-dismiss" class="link-btn">Dismiss</button>
+                </div>
+
                 <label>
                     <key>Voice:</key>
                     <!-- Filled by renderPromptPicker(). Deliberately outside a
@@ -333,6 +341,18 @@
 
                 <p class="help-text" id="prompt-description"></p>
                 <p class="help-text" id="prompt-provider-note"></p>
+
+                <label class="prompt-updates-row">
+                    <key>Improved voices:</key>
+                    <select id="prompt-updates">
+                        <option value="auto">Check the service daily</option>
+                        <option value="off">Never check</option>
+                    </select>
+                </label>
+                <p class="help-text">The mod only updates when you download a new zip, so this is how a
+                    reworded voice ever reaches you. It is one request a day carrying no key, no account
+                    and no rider data &mdash; and it never changes a prompt you wrote. Turn it off and
+                    the voices you have keep working.</p>
 
                 <div class="prompt-actions">
                     <button type="button" id="prompt-duplicate-btn" class="secondary-btn">Duplicate &amp; edit</button>

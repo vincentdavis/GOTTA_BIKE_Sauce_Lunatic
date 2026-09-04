@@ -4,7 +4,7 @@
     "description": "Like having Phil Liggett announcing your Zwift race, if he was a lunatic. AI race commentary, spoken aloud.",
     "author": "Vincent Davis",
     "website_url": "https://gotta.bike",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "content_js": [],
     "content_css": [],
     "web_root": "pages",

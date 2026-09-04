@@ -75,6 +75,23 @@ check('nothing to show yet, so it stays hidden', history.hidden === true);
 settingsStore.set('showHistory', false);
 check('toggling the setting does not throw', true);
 
+section('the overlay reads improved voices but never fetches them');
+// The overlay fires commentary within a second of real ride data. A prompt
+// fetch must never sit in front of that -- it reads the cache the settings
+// window filled, and nothing else. installGlobals() makes fetch throw, so a
+// stray call would have surfaced as a boot failure above.
+settingsStore.set('builtinPrompts', {
+    revision: 'r9',
+    fetchedAt: Date.now(),
+    data: [{
+        id: 'tour', version: 4, label: 'Tour de France', description: 'x',
+        systemPrompt: 'IMPROVED TOUR PROMPT', userPromptTemplate: '{riders}'
+    }]
+});
+const lib = await import('../pages/src/prompt-library.mjs');
+check('the cache is what resolves', lib.builtins(settingsStore).tour.systemPrompt === 'IMPROVED TOUR PROMPT');
+check('and the overlay would send it', lib.resolvePrompt(settingsStore).systemPrompt === 'IMPROVED TOUR PROMPT');
+
 section('the ~1Hz nearby handler');
 const nearby = subscribed.get('nearby');
 check('the overlay subscribed to nearby', typeof nearby === 'function');

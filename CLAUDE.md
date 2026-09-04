@@ -18,7 +18,8 @@ pages/announcer.html       overlay window
 pages/announcer-settings.html  settings (Settings/API/Prompts/Data/Help tabs)
 pages/src/announcer.mjs    all logic (~1900 lines)
 pages/src/prompts.mjs      the built-in announcer voices (leaf module)
-pages/src/prompt-library.mjs   the rider's own prompts; takes the store as an argument
+pages/src/prompt-library.mjs   the rider's own prompts + the server cache; takes the store
+pages/src/prompt-updates.mjs   the daily check against GET /v1/prompts
 pages/css/announcer.css    styles
 pages/images/logo.svg      source of truth for the logo; PNGs are rendered from it
 scripts/lib/stub-dom.mjs   a DOM + Sauce `common` small enough to boot the mod in Node
@@ -27,6 +28,7 @@ scripts/overlay-boot-test.mjs   boots the overlay, incl. the ~1Hz nearby handler
 scripts/prompt-migration-test.mjs  legacy voice ids land where they should
 scripts/prompt-parity-test.mjs     the mod and the service define the same voices
 scripts/prompt-library-test.mjs    the library's storage rules, driven directly
+scripts/prompt-updates-test.mjs    the update check, against the real service handler
 ```
 
 Run **both** boot tests after touching `announcer.mjs`. They are the only things
@@ -75,8 +77,17 @@ Both HTML files import the same module and call different entry points:
   `customUserPrompt` are migrated-away legacy keys: never write them, and never delete
   them either — they are what a downgrade reads.
 - **Built-in prompts are never copied into a rider's settings.** The mod reads their
-  text from `prompts.mjs` every time, so improving one is automatic and a rider's own
-  copy is never rewritten underneath them. Only what a rider wrote is stored.
+  text from `library.builtins(store)` every time — the server cache over the bundled
+  table — so improving one is automatic and a rider's own copy is never rewritten
+  underneath them. Only what a rider wrote is stored.
+- `prompts.mjs` is the **bundled floor**: never read it directly for a rider-facing
+  decision, or you skip the improvements the service sent. Use `library.builtins()`,
+  `library.builtinFor()` or `library.listBuiltins()`.
+- The update check runs **only in the settings window**, never on overlay boot — the
+  overlay fires commentary within a second of ride data and must not wait on a fetch.
+  It reads the cache and nothing else.
+- The check is anonymous by contract: no token, no account, no athlete id, no query
+  string. `prompt-updates-test.mjs` asserts that on the real request; keep it true.
 - **Every prompt migration lives in `migratePrompts()`, behind one flag, and runs
   once** — in *both* entry points. Two of them once sat in `migrateModelSetting()`,
   which runs on every window open; that would have reimposed an old hosted voice any
@@ -108,6 +119,9 @@ Both HTML files import the same module and call different entry points:
 '/gotta-bike-lunatic-migrated'       // one-time migration flag
 'promptLibrary'                      // per-window: the rider's own prompts
 'promptLibraryMigrated'              // per-window: prompt migrations ran
+'builtinPrompts'                     // per-window: voices fetched from the service
+'promptUpdates'                      // per-window: 'auto' (default) | 'off'
+'promptUpdateNotice'                 // per-window: the undismissed "voices updated" line
 '/gotta-bike-sauce-athlete-data'     // READ-ONLY, written by GOTTA.BIKE sauce
 'lunatic-announcer-settings-v1'      // per-window bag (data-settings-key)
 ```

@@ -156,3 +156,48 @@ export function listStyles() {
         description: s.description
     }));
 }
+
+/**
+ * A revision derived from the table's own content, not a number a human bumps.
+ *
+ * It is the ETag for GET /v1/prompts, so it has to change whenever any voice
+ * does. A hand-maintained counter is one more thing to forget in a repo that
+ * has already been bitten once by "remember to keep these in step" -- and
+ * forgetting it here means every mod in the world keeps serving the old text
+ * with no error anywhere.
+ *
+ * FNV-1a over the serialized table: eight hex characters, stable across
+ * restarts and across machines, which matters because a rider's cached ETag
+ * outlives any one deploy.
+ */
+export function promptsRevision() {
+    const text = JSON.stringify(STYLES);
+    let h = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) {
+        h ^= text.charCodeAt(i);
+        // The usual 16777619 multiply, kept in 32 bits without Math.imul
+        // overflowing into a float.
+        h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h.toString(16).padStart(8, '0');
+}
+
+/**
+ * The full definitions, for a client that builds its own request.
+ *
+ * This is what /v1/styles deliberately withholds. It is safe to serve openly:
+ * the free tier's protection is that the SERVICE substitutes the system prompt
+ * on its own calls, not that the text is secret -- and a rider on their own API
+ * key already has every one of these bundled in the mod they downloaded.
+ */
+export function listPromptDefinitions() {
+    return Object.entries(STYLES).map(([id, s]) => ({
+        id,
+        version: s.version,
+        label: s.label,
+        description: s.description,
+        systemPrompt: s.systemPrompt,
+        userPromptTemplate: s.userPromptTemplate,
+        changelog: s.changelog || ''
+    }));
+}
