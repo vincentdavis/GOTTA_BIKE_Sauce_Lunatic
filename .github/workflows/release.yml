@@ -3,10 +3,19 @@ name: Release
 on:
   push:
     tags: ['v*']
-  # Dry run from a branch: runs the checks, builds the zip, uploads it as a
-  # workflow artifact and publishes nothing. Lets you exercise the whole
-  # release path without spending a tag.
+  # Two modes from the Actions tab:
+  #   publish=false (default) — dry run: validate, build the zip, upload it as
+  #     a workflow artifact, publish nothing. Exercises the release path
+  #     without spending a tag.
+  #   publish=true — cut the release. The version comes from manifest.json and
+  #     the tag is created here, so the two cannot disagree by construction —
+  #     the mismatch the tag-push path exists to catch is impossible.
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Actually publish a release (otherwise just a dry run)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -36,9 +45,27 @@ jobs:
           MANIFEST=$(python3 -c "import json;print(json.load(open('manifest.json'))['version'])")
 
           if [ "$GITHUB_REF_TYPE" != tag ]; then
-            echo "Dry run from $GITHUB_REF_NAME: building $MANIFEST, publishing nothing."
+            if [ "${{ inputs.publish }}" != "true" ]; then
+              echo "Dry run from $GITHUB_REF_NAME: building $MANIFEST, publishing nothing."
+              echo "version=$MANIFEST" >> "$GITHUB_OUTPUT"
+              echo "prerelease=false" >> "$GITHUB_OUTPUT"
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            # Publishing from a branch. The version is read from the manifest
+            # rather than typed, so there is nothing to mistype and nothing to
+            # mismatch; the tag is created below.
+            if git ls-remote --exit-code --tags origin "v$MANIFEST" >/dev/null 2>&1; then
+              echo "::error::v$MANIFEST already exists. Bump the version in manifest.json first — a released tag is never moved."
+              exit 1
+            fi
+            echo "Publishing v$MANIFEST from $GITHUB_REF_NAME."
             echo "version=$MANIFEST" >> "$GITHUB_OUTPUT"
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "createTag=true" >> "$GITHUB_OUTPUT"
+            echo "checkMain=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -63,14 +90,16 @@ jobs:
           # The zip keeps the full tag, so an -rc build is never mistaken for
           # the release it is a candidate for.
           echo "version=$TAG" >> "$GITHUB_OUTPUT"
+          echo "publish=true" >> "$GITHUB_OUTPUT"
           if [ "$BASE" != "$TAG" ]; then
             echo "prerelease=true" >> "$GITHUB_OUTPUT"
           else
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "checkMain=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Full releases must be tagged on main
-        if: github.ref_type == 'tag' && steps.ver.outputs.prerelease == 'false'
+      - name: Full releases must be on main
+        if: steps.ver.outputs.checkMain == 'true'
         run: |
           git fetch --quiet origin main
           if ! git merge-base --is-ancestor HEAD FETCH_HEAD; then
@@ -78,6 +107,16 @@ jobs:
             exit 1
           fi
           echo "$GITHUB_REF_NAME is on main"
+
+      - name: Create the tag
+        if: steps.ver.outputs.createTag == 'true'
+        run: |
+          V="${{ steps.ver.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$V" -m "Release v$V"
+          git push origin "v$V"
+          echo "Tagged v$V at $(git rev-parse --short HEAD)"
 
       - name: Build mod zip
         run: |
@@ -92,17 +131,18 @@ jobs:
           ls -lh *.zip
 
       - name: Upload dry-run zip
-        if: github.ref_type != 'tag'
+        if: steps.ver.outputs.publish != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.MOD_FOLDER }}_${{ steps.ver.outputs.version }}
           path: build/*.zip
 
       - name: Publish release
-        if: github.ref_type == 'tag'
+        if: steps.ver.outputs.publish == 'true'
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           files: build/*.zip
+          tag_name: v${{ steps.ver.outputs.version }}
           generate_release_notes: true
           prerelease: ${{ steps.ver.outputs.prerelease == 'true' }}
           body: |
