@@ -105,12 +105,17 @@ jobs:
             3. Restart Sauce4Zwift and enable the mod, then open the
                **Lunatic Announcer** window.
 
-            ## Requires your own Anthropic API key
+            ## Pick a provider
 
-            This mod calls the Claude API directly from the overlay using a key
-            you supply in its settings. Usage is billed to **your** Anthropic
-            account. Rider data and your key are sent from the browser overlay
-            to `api.anthropic.com`.
+            On the **AI Provider** tab, choose one of:
+
+            - **Lunatic hosted** - no API key, a monthly allowance of free calls.
+            - **Anthropic** - your own key, billed to your account.
+            - **OpenAI-compatible** - OpenAI, Google Gemini, OpenRouter, Groq,
+              or a local Ollama.
+
+            Whichever you choose, rider data leaves your machine: the names,
+            power and heart rate of riders around you are sent to that service.
 
             Spoken commentary is **off by default** - enable it with the
             speaker button in the window titlebar.

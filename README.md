@@ -10,8 +10,8 @@ A [Sauce4Zwift](https://github.com/SauceLLC/sauce4zwift) mod that calls your Zwi
 race live — as a TV commentator would — and reads it aloud while you ride.
 
 It watches the riders around you at 1&nbsp;Hz, detects what actually *changes* on the
-road (attacks, riders cracking, gaps opening, catches), and asks Claude for a
-one-line race call. Lines fire when something happens, not on a timer.
+road (attacks, riders cracking, gaps opening, catches), and asks an AI model for
+a one-line race call. Lines fire when something happens, not on a timer.
 
 ## Features
 
@@ -23,15 +23,28 @@ one-line race call. Lines fire when something happens, not on a timer.
 - **Storyline memory.** An attack is remembered, so the catch two minutes later
   gets a callback.
 - **Won't repeat itself.** Lines that restate a recent one are dropped.
+- **Your choice of model.** Anthropic, or any OpenAI-compatible service — OpenAI,
+  Google Gemini, OpenRouter, Groq, or a local Ollama.
 
-## Requires your own Anthropic API key
+## Three ways to get commentary
 
-This mod calls the Claude API **directly from the overlay** with a key you enter in
-its settings. Usage is billed to **your** Anthropic account. Rider data and your API
-key are sent from the browser overlay to `api.anthropic.com`.
+Pick one on the **AI Provider** tab.
 
+**Lunatic hosted — no API key.** Point the mod at a hosted service URL and click
+Connect. A monthly allowance of free calls; nothing is billed to you. The service
+supplies the announcer voice, so your own prompts are not used on this option.
+
+**Anthropic.** Paste a key from [console.anthropic.com](https://console.anthropic.com).
+The overlay calls `api.anthropic.com` directly and usage is billed to your account.
 Default model is Claude Haiku 4.5 — the fastest and cheapest, which is what live
-commentary wants. Roughly $0.15–0.35 per hour of racing at the default cadence.
+commentary wants. About $0.0013 a call, or $0.10–0.39 per hour of racing.
+
+**OpenAI-compatible.** OpenAI, Gemini, OpenRouter, Groq, or Ollama on your own
+machine. Choose the service to prefill its URL, paste a key, and enter a model id.
+Model ids are free text on purpose — they change faster than this mod ships.
+
+Whichever you pick, **rider data leaves your machine**: the names, power and heart
+rate of riders around you are sent to whichever service you choose.
 
 ## Install
 
@@ -39,7 +52,7 @@ commentary wants. Roughly $0.15–0.35 per hour of racing at the default cadence
 2. Unzip into `~/Documents/SauceMods/` so you have
    `SauceMods/GOTTA_BIKE_Sauce_Lunatic/manifest.json`.
 3. Restart Sauce4Zwift, enable the mod, open the **Lunatic Announcer** window.
-4. Open its settings (gear icon) → **Claude API** tab → paste your key.
+4. Open its settings (gear icon) → **AI Provider** tab → pick a provider.
 5. Click the speaker button in the titlebar to unmute. Audio is off by default.
 
 ## Controls
