@@ -87,12 +87,58 @@ export function readCache(store) {
         }
     }
     if (!Object.keys(items).length) return null;
+    // What each changed voice said BEFORE this fetch, so "what changed" has a
+    // left-hand side. Only the ids that actually moved, and only until the
+    // notice is dismissed -- keeping the whole previous table would double the
+    // settings bag for a view most riders open once.
+    const previous = {};
+    if (raw.previous && typeof raw.previous === 'object') {
+        for (const [id, p] of Object.entries(raw.previous)) {
+            if (!p || typeof p !== 'object') continue;
+            previous[id] = {
+                version: Number(p.version) || 0,
+                systemPrompt: String(p.systemPrompt || ''),
+                userPromptTemplate: String(p.userPromptTemplate || '')
+            };
+        }
+    }
+
     return {
         items,
+        previous,
         revision: String(raw.revision || ''),
         etag: String(raw.etag || ''),
         fetchedAt: Number(raw.fetchedAt) || 0
     };
+}
+
+/**
+ * What a voice said before the last update, if anything is kept for it.
+ * Null once the notice is dismissed, or for a voice that has never changed.
+ */
+export function previousBuiltin(store, id) {
+    return readCache(store)?.previous?.[id] || null;
+}
+
+/**
+ * Copies whose source has been improved since they were made.
+ *
+ * Their text is never touched -- this is only so the editor can say so, and
+ * offer the diff and the reset. A copy of a voice that has since vanished from
+ * the table is not stale, just orphaned, and says nothing.
+ */
+export function staleCopies(store) {
+    const table = builtins(store);
+    return listUserPrompts(store)
+        .filter(p => p.from && table[p.from.id] && table[p.from.id].version > p.from.version)
+        .map(p => ({
+            id: p.id,
+            name: p.name,
+            sourceId: p.from.id,
+            sourceLabel: table[p.from.id].label,
+            had: p.from.version,
+            now: table[p.from.id].version
+        }));
 }
 
 /**

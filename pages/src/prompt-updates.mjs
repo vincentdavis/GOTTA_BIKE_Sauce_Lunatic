@@ -22,7 +22,7 @@
  */
 
 import { BUILTIN_PROMPTS } from './prompts.mjs';
-import { CACHE_KEY, readCache } from './prompt-library.mjs';
+import { CACHE_KEY, readCache, builtins } from './prompt-library.mjs';
 
 export const UPDATES_KEY = 'promptUpdates';
 export const NOTICE_KEY = 'promptUpdateNotice';
@@ -139,8 +139,25 @@ export async function checkForUpdates(store, {
 
     const changes = diffAgainst(store, body.data);
 
+    // Keep what each changed voice said before, so the notice can show a diff.
+    // Carried forward across successive updates until the notice is dismissed:
+    // two checks a day apart should still diff against what the rider last saw,
+    // not against the intermediate text they never read.
+    const before = builtins(store);
+    const previous = { ...(readCache(store)?.previous || {}) };
+    for (const u of changes.updated) {
+        if (!previous[u.id] && before[u.id]) {
+            previous[u.id] = {
+                version: before[u.id].version,
+                systemPrompt: before[u.id].systemPrompt,
+                userPromptTemplate: before[u.id].userPromptTemplate
+            };
+        }
+    }
+
     store.set(CACHE_KEY, {
         data: body.data,
+        previous,
         revision: String(body.revision || ''),
         etag: String(res.headers?.get?.('etag') || ''),
         fetchedAt: now
@@ -164,6 +181,7 @@ export async function checkForUpdates(store, {
 function rawOf(cached) {
     return {
         data: Object.entries(cached.items).map(([id, p]) => ({ id, ...p })),
+        previous: cached.previous,
         revision: cached.revision,
         etag: cached.etag,
         fetchedAt: cached.fetchedAt
@@ -194,8 +212,17 @@ export function pendingNotice(store) {
     return { updated, added };
 }
 
+/**
+ * Dismissing also drops the retained previous text: it exists only to render
+ * the diff behind this notice, and a settings bag should not carry a second
+ * copy of the prompt table forever.
+ */
 export function dismissNotice(store) {
     store.set(NOTICE_KEY, null);
+    const raw = store.get(CACHE_KEY);
+    if (raw && typeof raw === 'object' && raw.previous) {
+        store.set(CACHE_KEY, { ...raw, previous: {} });
+    }
 }
 
 /** One line a person can read, for the notice at the top of the Prompts tab. */

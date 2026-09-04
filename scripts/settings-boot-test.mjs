@@ -130,20 +130,110 @@ check('the off switch reflects the default', el('prompt-updates').value === 'aut
     el('prompt-updates').value);
 
 section('a pending notice is shown, and dismissible');
+// A realistic post-update state: Lunatic rewritten, Velodrome new, and the
+// previous Lunatic text retained so the diff has a left-hand side.
 settingsStore.set('promptUpdateNotice', {
     updated: [{ id: 'lunatic', label: 'Lunatic', from: 1, to: 2 }],
     added: [{ id: 'velodrome', label: 'Velodrome' }]
 });
-settingsStore.set('builtinPrompts', { data: [], revision: 'x' });   // triggers a re-render
+settingsStore.set('builtinPrompts', {
+    revision: 'r2',
+    fetchedAt: Date.now(),
+    data: [
+        { id: 'lunatic', version: 2, label: 'Lunatic', description: 'Louder.',
+          systemPrompt: 'Shout the race.\nRule one, revised.\nRule two.',
+          userPromptTemplate: '{raceContext}\n{events}\n{watchingSection}\n{riders}\n{recentLines}' },
+        { id: 'velodrome', version: 1, label: 'Velodrome', description: 'Track racing.',
+          systemPrompt: 'Call a track race.\nOne sentence.',
+          userPromptTemplate: '{raceContext}\n{events}\n{watchingSection}\n{riders}\n{recentLines}' }
+    ],
+    previous: {
+        lunatic: { version: 1, systemPrompt: 'Shout the race.\nRule one.\nRule two.',
+                   userPromptTemplate: '{raceContext}\n{events}\n{watchingSection}\n{riders}\n{recentLines}' }
+    }
+});
 check('the notice appears', !el('prompt-notice').hidden);
 check('naming both changes',
     /Lunatic/.test(el('prompt-notice-text').textContent) &&
     /Velodrome/.test(el('prompt-notice-text').textContent),
     el('prompt-notice-text').textContent);
 check('and saying your own are safe', /unchanged/.test(el('prompt-notice-text').textContent));
+section('the notice can show what actually changed');
+check('a diff is offered', !el('prompt-notice-diff').hidden);
+check('but not opened yet', el('prompt-notice-diff-view').hidden);
+fire(el('prompt-notice-diff'), 'click');
+check('clicking opens it', !el('prompt-notice-diff-view').hidden);
+check('with something in it', el('prompt-notice-diff-view').children.length > 0);
+{
+    // The real thing: the revised rule shown as a replacement, labelled by voice.
+    const lines = el('prompt-notice-diff-view').children
+        .flatMap(f => f.children).map(n => n.textContent);
+    check('the old wording is shown as removed', lines.some(t => /^-?\s*Rule one\.$/.test(t.trim())),
+        JSON.stringify(lines));
+    check('and the new wording as added', lines.some(t => /Rule one, revised\./.test(t)));
+    check('under the voice it belongs to', lines.some(t => /^Lunatic · /.test(t)),
+        lines.filter(t => /·/.test(t)).join(' | '));
+}
+fire(el('prompt-notice-diff'), 'click');
+check('and clicking again closes it', el('prompt-notice-diff-view').hidden);
+
+section('a new voice is marked in the picker');
+{
+    const names = picker.children[0].children.map(o => o.textContent);
+    check('the new one says so', names.some(n => / — new$/.test(n)), names.join(' | '));
+    check('and the others do not', names.filter(n => / — new$/.test(n)).length === 1);
+}
+
 fire(el('prompt-notice-dismiss'), 'click');
 check('dismiss hides it', el('prompt-notice').hidden);
 check('and it stays dismissed', settingsStore.get('promptUpdateNotice') === null);
+check('the "new" marker goes with it',
+    !picker.children[0].children.some(o => / — new$/.test(o.textContent)));
+check('and the retained previous text is dropped',
+    Object.keys(settingsStore.get('builtinPrompts')?.previous || {}).length === 0);
+
+section('a copy whose source has moved on');
+{
+    // A service update that rewrites Lunatic, and a copy made before it.
+    settingsStore.set('builtinPrompts', {
+        revision: 'r3', fetchedAt: Date.now(),
+        data: [{
+            id: 'lunatic', version: 4, label: 'Lunatic', description: 'Louder than ever.',
+            systemPrompt: 'You are a live bike-race commentator.\nRewritten rule.\nAnother.',
+            userPromptTemplate: '{raceContext}\n{events}\n{watchingSection}\n{riders}\n{recentLines}'
+        }]
+    });
+    picker.value = 'lunatic';
+    fire(picker, 'change');
+    fire(el('prompt-duplicate-btn'), 'click');
+    check('a fresh copy says nothing', el('prompt-stale').hidden);
+
+    // Now the service moves on again, past the version they copied.
+    const raw = settingsStore.get('builtinPrompts');
+    settingsStore.set('builtinPrompts', {
+        ...raw,
+        data: [{ ...raw.data[0], version: 9, systemPrompt: 'Completely different now.' }]
+    });
+    fire(picker, 'change');
+    check('now it does', !el('prompt-stale').hidden);
+    check('naming the versions', /version 4 to 9/.test(el('prompt-stale-text').textContent),
+        el('prompt-stale-text').textContent);
+    check('and promising their text is safe',
+        /untouched/.test(el('prompt-stale-text').textContent));
+    check('their text really is', el('custom-system-prompt').value.includes('Rewritten rule'),
+        el('custom-system-prompt').value.slice(0, 40));
+
+    fire(el('prompt-stale-diff'), 'click');
+    check('the diff opens', !el('prompt-stale-diff-view').hidden);
+    check('showing theirs against the new original',
+        el('prompt-stale-diff-view').children.length > 0);
+
+    fire(el('prompt-revert-btn'), 'click');
+    check('resetting takes the new original',
+        el('custom-system-prompt').value === 'Completely different now.',
+        el('custom-system-prompt').value);
+    check('and the notice clears', el('prompt-stale').hidden);
+}
 
 section('the voice picker resolves without waiting out its timeout');
 const ttsSel = el('tts-voice');

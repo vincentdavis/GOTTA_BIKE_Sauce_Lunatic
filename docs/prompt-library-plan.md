@@ -298,10 +298,16 @@ and a hosted-only choice migrates across unless the shared key was set deliberat
 | **1. Reconcile** ✅ *done, v0.5.0* | one canonical set, `userPromptTemplate` + `version` server-side, mirrored bundle, drift check in CI | Lunatic and Old Pro became reachable on BYOK — the biggest single win, and no new machinery |
 | **2. Library** ✅ *done, v0.6.0* | `promptLibrary`, migration, the redesigned Prompts tab, duplicate/edit/create/rename/delete, per-provider honesty | the whole second feature, entirely offline |
 | **3. Fetch** ✅ *done, v0.7.0* | `GET /v1/prompts` + ETag, the 24h check, cache, adopt rules, `promptUpdates` setting | improved voices reach existing installs |
-| **4. Polish** | "what changed" diff view, "the source has moved on" prompt, new-voice badge | makes phase 3 legible instead of mysterious |
+| **4. Polish** ✅ *done, v0.8.0* | "what changed" diff view, "the source has moved on" prompt, new-voice badge | makes phase 3 legible instead of mysterious |
 
 Phases 1 and 2 are independent of the service being up. Phase 3 is the only one that
 needs a deploy. Each is releasable.
+
+**All four shipped.** One thing phase 4 needed that the plan did not anticipate: a diff
+has to have a left-hand side, and phase 3's cache overwrote the old text. The cache now
+retains the previous copy of *only the voices that changed*, carried forward across
+successive checks until the notice is dismissed — so two updates a day apart still diff
+against what the rider last read, not against the intermediate text they never saw.
 
 ---
 

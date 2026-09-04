@@ -61,6 +61,7 @@ jobs:
           node scripts/prompt-parity-test.mjs
           node scripts/prompt-library-test.mjs
           node scripts/prompt-updates-test.mjs
+          node scripts/prompt-diff-test.mjs
 
       - name: Syntax-check the hosted service
         # The service ships separately from the mod zip, but a syntax error

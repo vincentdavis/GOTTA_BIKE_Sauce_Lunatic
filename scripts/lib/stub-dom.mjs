@@ -99,7 +99,13 @@ export function makeEl(tag = 'div', data = {}) {
     let text = '';
     let html = '';
     Object.defineProperty(el, 'textContent', {
-        get: () => text,
+        // Reading composes from descendants, as a real one does. Assigning
+        // clears them, so own-text and children are never both in play --
+        // without this a node built from appended spans reads as empty, and a
+        // test asserting on rendered text silently checks nothing.
+        get: () => (el.children.length
+            ? el.children.map(c => c?.textContent ?? '').join('')
+            : text),
         set: v => { text = String(v); html = ''; el.children.length = 0; },
         enumerable: true
     });

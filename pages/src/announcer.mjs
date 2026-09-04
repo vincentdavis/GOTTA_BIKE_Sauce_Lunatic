@@ -10,6 +10,7 @@ import {
 } from './prompts.mjs';
 import * as library from './prompt-library.mjs';
 import * as promptUpdates from './prompt-updates.mjs';
+import { diffPrompts } from './prompt-diff.mjs';
 
 // Storage keys (global, shared across windows)
 const ATHLETE_DATA_KEY = '/gotta-bike-sauce-athlete-data';
@@ -2141,7 +2142,15 @@ function renderPromptPicker() {
     const builtins = group('Built-in');
     // The merged table: what the service last sent, over what the mod shipped
     // with. A voice added since this zip was built belongs in the list.
-    for (const p of library.listBuiltins(common.settingsStore)) option(builtins, p.id, p.label);
+    //
+    // A `<select>` cannot carry a badge, so a new arrival is marked in its own
+    // label. It clears when the notice is dismissed, which is the same moment
+    // the rider has acknowledged it.
+    const fresh = new Set((promptUpdates.pendingNotice(common.settingsStore)?.added || [])
+        .map(v => v.id));
+    for (const p of library.listBuiltins(common.settingsStore)) {
+        option(builtins, p.id, fresh.has(p.id) ? `${p.label} — new` : p.label);
+    }
 
     const own = library.listUserPrompts(common.settingsStore);
     if (own.length) {
@@ -2187,8 +2196,40 @@ function renderPromptEditor() {
     show('prompt-revert-btn', !p.readOnly && !!p.from);
 
     renderPromptProviderNote(p);
+    renderStaleNotice(p);
     resetDeleteButton();
     setPromptStatus('');
+}
+
+/**
+ * "The voice you copied has been improved since."
+ *
+ * Their text is not touched and never will be -- this is the whole point of
+ * keeping built-ins out of a rider's settings. It only tells them, so they can
+ * look at the change and decide; Reset to source is right there if they want it.
+ */
+function renderStaleNotice(p = library.resolvePrompt(common.settingsStore)) {
+    const box = document.getElementById('prompt-stale');
+    const text = document.getElementById('prompt-stale-text');
+    const view = document.getElementById('prompt-stale-diff-view');
+    if (!box || !text) return;
+
+    const stale = library.staleCopies(common.settingsStore).find(c => c.id === p.id);
+    box.hidden = !stale;
+    if (view) view.hidden = true;
+    if (!stale) return;
+
+    text.textContent = `${stale.sourceLabel} has been improved since you copied it ` +
+        `(version ${stale.had} to ${stale.now}). Your version is untouched — ` +
+        `“Reset to source” below would replace it with the new original.`;
+}
+
+/** What the rider has, against the source as it stands now. */
+function staleDiffParts() {
+    const store = common.settingsStore;
+    const p = library.resolvePrompt(store);
+    if (!p.from) return [];
+    return diffPrompts(p, library.builtinFor(store, p.from.id));
 }
 
 /**
@@ -2228,6 +2269,66 @@ function resetDeleteButton() {
 }
 
 /**
+ * Render a prompt diff into a container.
+ *
+ * Built with createElement rather than innerHTML: every line here is prompt
+ * text, and some of it is text a rider typed. Colour is doubled by a +/-
+ * gutter, because red-and-green alone is not a signal everyone can read.
+ */
+function renderDiff(container, parts) {
+    if (!container) return;
+    container.textContent = '';
+    if (!parts.length) {
+        const p = document.createElement('div');
+        p.className = 'diff-gap';
+        p.textContent = 'The wording is identical — only the version number moved.';
+        container.append(p);
+        return;
+    }
+    for (const part of parts) {
+        const field = document.createElement('div');
+        field.className = 'diff-field';
+
+        const label = document.createElement('div');
+        label.className = 'diff-field-label';
+        label.textContent = `${part.label} — ${part.added} added, ${part.removed} removed`;
+        field.append(label);
+
+        for (const h of part.hunks) {
+            if (h.type === 'gap') {
+                const gap = document.createElement('div');
+                gap.className = 'diff-gap';
+                gap.textContent = `… ${h.count} unchanged lines`;
+                field.append(gap);
+                continue;
+            }
+            const line = document.createElement('div');
+            line.className = `diff-line ${h.type}`;
+            const gutter = document.createElement('span');
+            gutter.className = 'gutter';
+            gutter.textContent = { add: '+', del: '-', same: ' ' }[h.type];
+            const text = document.createElement('span');
+            text.textContent = h.text;
+            line.append(gutter, text);
+            field.append(line);
+        }
+        container.append(field);
+    }
+}
+
+/** Expand or collapse a diff panel, filling it the first time it is opened. */
+function toggleDiff(viewId, buildParts) {
+    const view = document.getElementById(viewId);
+    if (!view) return;
+    if (view.hidden) {
+        renderDiff(view, buildParts());
+        view.hidden = false;
+    } else {
+        view.hidden = true;
+    }
+}
+
+/**
  * The "a voice was improved" line at the top of the Prompts tab.
  *
  * A line on the tab a rider is already looking at, dismissible, and nothing in
@@ -2241,6 +2342,29 @@ function renderPromptNotice() {
     const notice = promptUpdates.pendingNotice(common.settingsStore);
     box.hidden = !notice;
     text.textContent = notice ? promptUpdates.describeNotice(notice) : '';
+
+    // Only offer the diff when something was rewritten. A brand-new voice has
+    // no previous text, so there would be nothing on the left-hand side.
+    const diffBtn = document.getElementById('prompt-notice-diff');
+    if (diffBtn) diffBtn.hidden = !notice?.updated?.length;
+    const view = document.getElementById('prompt-notice-diff-view');
+    if (view) view.hidden = true;
+}
+
+/** Every rewritten voice in the pending notice, old text against new. */
+function noticeDiffParts() {
+    const store = common.settingsStore;
+    const notice = promptUpdates.pendingNotice(store);
+    const parts = [];
+    for (const u of notice?.updated || []) {
+        const before = library.previousBuiltin(store, u.id);
+        const after = library.builtinFor(store, u.id);
+        if (!before) continue;
+        for (const part of diffPrompts(before, after)) {
+            parts.push({ ...part, label: `${u.label} · ${part.label}` });
+        }
+    }
+    return parts;
 }
 
 /**
@@ -2333,8 +2457,17 @@ function setupPromptLibrary() {
         });
     }
 
+    document.getElementById('prompt-notice-diff')?.addEventListener('click', () => {
+        toggleDiff('prompt-notice-diff-view', noticeDiffParts);
+    });
+
+    document.getElementById('prompt-stale-diff')?.addEventListener('click', () => {
+        toggleDiff('prompt-stale-diff-view', staleDiffParts);
+    });
+
     document.getElementById('prompt-notice-dismiss')?.addEventListener('click', () => {
         promptUpdates.dismissNotice(store);
+        renderPromptPicker();
         renderPromptNotice();
     });
 

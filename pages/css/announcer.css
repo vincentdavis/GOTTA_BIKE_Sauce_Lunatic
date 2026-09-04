@@ -662,9 +662,10 @@ body:not(.transparent-bg) {
 
 /* "A voice was improved" — news, so it reads as a note rather than a warning. */
 .prompt-notice {
-    display: flex;
-    align-items: baseline;
-    gap: 0.6em;
+    /* A block, not a flex row: the head is the row, and the diff panel below it
+       is a sibling. As a flex parent it put the diff BESIDE the text and
+       squeezed the sentence into a narrow column. */
+    display: block;
     margin: 0.6em 0 0.9em;
     padding: 0.6em 0.8em;
     border-left: 3px solid #4f9ad6;
@@ -690,6 +691,75 @@ body:not(.transparent-bg) {
 .link-btn:hover { color: #b9d6ef; }
 
 .prompt-updates-row select { max-width: 22em; }
+
+.prompt-notice-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6em;
+}
+
+.prompt-notice-head span { flex: 1; }
+
+/* "Your copy is behind" is a different thing from "a voice improved": nothing
+   has happened to their text, and the colour should not imply that it has. */
+.prompt-notice.stale {
+    border-left-color: #e0a33a;
+    background: rgba(224, 163, 58, 0.1);
+}
+
+/* --- the diff --------------------------------------------------------------
+   Monospace and line-per-row, because a prompt is a numbered rule list and the
+   eye needs the left edge to line up. Colour is doubled by a +/- gutter: a
+   green/red pair is unreadable to a good few riders on its own. */
+.diff-view {
+    margin-top: 0.7em;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    padding-top: 0.6em;
+    max-height: 22em;
+    overflow: auto;
+}
+
+.diff-view[hidden] { display: none !important; }
+
+.diff-field {
+    margin-bottom: 0.8em;
+}
+
+.diff-field-label {
+    font-size: 0.8em;
+    color: #9aa4a8;
+    margin-bottom: 0.3em;
+}
+
+.diff-line {
+    display: flex;
+    gap: 0.5em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.78em;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    padding: 0 0.3em;
+    border-radius: 2px;
+}
+
+.diff-line .gutter {
+    flex: none;
+    width: 1ch;
+    opacity: 0.7;
+    user-select: none;
+}
+
+.diff-line.same { color: #8d9599; }
+.diff-line.add { color: #a6e3b8; background: rgba(82, 192, 122, 0.12); }
+.diff-line.del { color: #efb3a8; background: rgba(215, 90, 68, 0.12); }
+
+.diff-gap {
+    font-size: 0.75em;
+    color: #6b7478;
+    font-style: italic;
+    padding: 0.25em 0.3em;
+}
 
 /* Provider-specific settings rows. setupProviderControls() toggles .hidden on
    every [data-provider] element so only the active provider's fields show.

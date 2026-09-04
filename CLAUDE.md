@@ -20,6 +20,7 @@ pages/src/announcer.mjs    all logic (~1900 lines)
 pages/src/prompts.mjs      the built-in announcer voices (leaf module)
 pages/src/prompt-library.mjs   the rider's own prompts + the server cache; takes the store
 pages/src/prompt-updates.mjs   the daily check against GET /v1/prompts
+pages/src/prompt-diff.mjs      an LCS line diff, for showing what changed
 pages/css/announcer.css    styles
 pages/images/logo.svg      source of truth for the logo; PNGs are rendered from it
 scripts/lib/stub-dom.mjs   a DOM + Sauce `common` small enough to boot the mod in Node
@@ -29,6 +30,7 @@ scripts/prompt-migration-test.mjs  legacy voice ids land where they should
 scripts/prompt-parity-test.mjs     the mod and the service define the same voices
 scripts/prompt-library-test.mjs    the library's storage rules, driven directly
 scripts/prompt-updates-test.mjs    the update check, against the real service handler
+scripts/prompt-diff-test.mjs       the line diff and "your copy is behind" 
 ```
 
 Run **both** boot tests after touching `announcer.mjs`. They are the only things
@@ -88,6 +90,12 @@ Both HTML files import the same module and call different entry points:
   It reads the cache and nothing else.
 - The check is anonymous by contract: no token, no account, no athlete id, no query
   string. `prompt-updates-test.mjs` asserts that on the real request; keep it true.
+- The cache keeps a `previous` copy of **only the voices that changed**, so the notice
+  has a left-hand side to diff against. Dismissing the notice drops it — a settings bag
+  must not carry a second copy of the prompt table forever.
+- Diff lines are built with `createElement`, never `innerHTML`: some of that text is
+  what a rider typed. Colour is doubled by a `+`/`-` gutter, since red-and-green alone
+  is not a signal everyone can read.
 - **Every prompt migration lives in `migratePrompts()`, behind one flag, and runs
   once** — in *both* entry points. Two of them once sat in `migrateModelSetting()`,
   which runs on every window open; that would have reimposed an old hosted voice any

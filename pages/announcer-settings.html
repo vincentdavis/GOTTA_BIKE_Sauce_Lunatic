@@ -326,8 +326,12 @@
                      improved or new voice. Never a dialog and never in the
                      overlay: this is news, not an interruption. -->
                 <div id="prompt-notice" class="prompt-notice" hidden>
-                    <span id="prompt-notice-text"></span>
-                    <button type="button" id="prompt-notice-dismiss" class="link-btn">Dismiss</button>
+                    <div class="prompt-notice-head">
+                        <span id="prompt-notice-text"></span>
+                        <button type="button" id="prompt-notice-diff" class="link-btn">See what changed</button>
+                        <button type="button" id="prompt-notice-dismiss" class="link-btn">Dismiss</button>
+                    </div>
+                    <div id="prompt-notice-diff-view" class="diff-view" hidden></div>
                 </div>
 
                 <label>
@@ -365,6 +369,17 @@
                 <h2 id="prompt-editor-title">The prompt</h2>
                 <p class="help-text" id="prompt-readonly-note">Built-in voices cannot be edited. Use
                     <strong>Duplicate &amp; edit</strong> to make a version of your own.</p>
+
+                <!-- Shown by renderPromptEditor() when the built-in this copy came
+                     from has since been improved. Their text is never touched;
+                     this only tells them, and offers the diff and the reset. -->
+                <div id="prompt-stale" class="prompt-notice stale" hidden>
+                    <div class="prompt-notice-head">
+                        <span id="prompt-stale-text"></span>
+                        <button type="button" id="prompt-stale-diff" class="link-btn">See what changed</button>
+                    </div>
+                    <div id="prompt-stale-diff-view" class="diff-view" hidden></div>
+                </div>
 
                 <label id="prompt-name-row">
                     <key>Name:</key>
