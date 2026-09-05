@@ -1629,6 +1629,8 @@ export async function lunaticAnnouncerSettingsMain() {
     // Load current API info
     updateApiInfo();
 
+    renderHelpLink();
+
     // Render shared cost counters and keep them live across windows.
     renderCost();
     common.settingsStore.addEventListener('set', ev => {
@@ -1648,6 +1650,7 @@ export async function lunaticAnnouncerSettingsMain() {
         // depends on the provider chosen on the other tab.
         if (PROVIDER_SETTING_KEYS.some(k => changed.has(k))) {
             renderPromptProviderNote();
+            renderHelpLink();
         }
     });
 
@@ -2383,6 +2386,19 @@ function checkPromptUpdates() {
             renderPromptNotice();
         })
         .catch(err => console.warn('[Lunatic] prompt update check failed:', err));
+}
+
+/**
+ * Point the Help tab's link at the service actually in use.
+ *
+ * Not hardcoded: the base URL is a setting, and someone running their own
+ * deployment should reach their own page — which is also the only one whose
+ * quotas and model list will match what they are getting.
+ */
+function renderHelpLink() {
+    const link = document.getElementById('help-site-link');
+    if (!link) return;
+    link.href = `${promptUpdates.serviceUrlFor(common.settingsStore)}/help`;
 }
 
 function setupPromptLibrary() {

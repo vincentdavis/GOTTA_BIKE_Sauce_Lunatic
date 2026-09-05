@@ -121,6 +121,21 @@ fire(del, 'click');
 check('two clicks delete', groups().length === 1, JSON.stringify(groups().map(g => g.label)));
 check('and fall back to a built-in', picker.value === 'tour', picker.value);
 
+section('the Help tab links to the help page');
+{
+    const link = el('help-site-link');
+    check('it points at the public service by default',
+        link.href === 'https://gottabikesaucelunatic-production.up.railway.app/help', link.href);
+    // Someone running their own deployment must reach their own page: it is the
+    // only one whose quotas and model list match what they are actually getting.
+    settingsStore.set('hostedBaseUrl', 'https://my-own-instance.example/');
+    check('and at your own service when you set one',
+        link.href === 'https://my-own-instance.example/help', link.href);
+    settingsStore.set('hostedBaseUrl', '');
+    check('a cleared URL falls back rather than breaking',
+        link.href.endsWith('.up.railway.app/help'), link.href);
+}
+
 section('the update check does not get in the way');
 // installGlobals() makes fetch throw, so this is the offline case: the settings
 // window has to open regardless, and nothing may be left half-rendered.

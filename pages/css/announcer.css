@@ -692,6 +692,30 @@ body:not(.transparent-bg) {
 
 .prompt-updates-row select { max-width: 22em; }
 
+/* The one outbound link on the Help tab. Given its own weight because it is
+   the answer to most of the questions the rest of the tab tries to pre-empt. */
+.help-site-link {
+    margin: 0;
+}
+
+.help-site-link a {
+    display: inline-block;
+    font-size: 1.05em;
+    font-weight: 600;
+    color: #8ab4d8;
+    text-decoration: none;
+}
+
+.help-site-link a:hover {
+    color: #b9d6ef;
+    text-decoration: underline;
+}
+
+.help-site-link .help-text {
+    display: block;
+    margin-top: 0.25em;
+}
+
 .prompt-notice-head {
     display: flex;
     align-items: baseline;
