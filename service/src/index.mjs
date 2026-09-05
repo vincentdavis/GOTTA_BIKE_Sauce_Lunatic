@@ -13,6 +13,7 @@
  *                              their own request (ETag + 304)
  *   GET  /v1/quota             remaining allowance, without spending a call
  *   POST /v1/chat/completions  the commentary call (SSE by default)
+ *   GET  /                     the public help page (also /help)
  *   GET  /healthz              liveness plus the two facts an operator needs
  */
 
@@ -31,6 +32,7 @@ import {
     successPage, errorPage
 } from './discord.mjs';
 import { styleFor, listStyles, listPromptDefinitions, promptsRevision, DEFAULT_STYLE } from './styles.mjs';
+import { helpPage } from './site.mjs';
 import { callUpstream, UpstreamError } from './upstream.mjs';
 
 const MAX_BODY_BYTES = 256 * 1024;
@@ -289,6 +291,34 @@ const server = createServer(async (req, res) => {
     }
 
     try {
+        /**
+         * The public help page.
+         *
+         * The service URL is the one thing a rider types into the mod by hand,
+         * so it is also the one they will paste into a browser -- and until now
+         * that returned a JSON 404. Install steps, provider setup and
+         * troubleshooting live here, rendered from this service's own config so
+         * the numbers on it cannot go stale.
+         */
+        if ((req.method === 'GET' || req.method === 'HEAD') && (path === '/' || path === '/help')) {
+            const body = helpPage();
+            res.writeHead(200, {
+                'Content-Type': 'text/html; charset=utf-8',
+                'Content-Length': Buffer.byteLength(body),
+                // Nothing on the page is per-user, but it is rendered from live
+                // config, so a short cache rather than a long one.
+                'Cache-Control': 'public, max-age=300',
+                // The page loads nothing from anywhere: no scripts, no fonts,
+                // no images beyond the inline SVG. Say so, so a future edit
+                // that adds a third-party script fails loudly.
+                'Content-Security-Policy':
+                    "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'",
+                'X-Content-Type-Options': 'nosniff',
+                'Referrer-Policy': 'no-referrer'
+            });
+            return res.end(req.method === 'HEAD' ? undefined : body);
+        }
+
         if (req.method === 'GET' && path === '/healthz') {
             const spend = await spentToday();
             return json(res, 200, {

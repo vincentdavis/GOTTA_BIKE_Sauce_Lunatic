@@ -82,6 +82,15 @@ for (const [id, p] of Object.entries(mod.BUILTIN_PROMPTS)) {
     check(`${id} states its own length rule`, /One sentence, occasionally two/.test(p.systemPrompt));
 }
 
+console.log('\n=== the logo is the same file on both sides ===');
+{
+    const { readFileSync } = await import('node:fs');
+    const modLogo = readFileSync(join(REPO, 'pages/images/logo.svg'), 'utf8');
+    const svcLogo = (await load('service/src/logo.mjs')).LOGO_SVG;
+    check('service/src/logo.mjs matches pages/images/logo.svg', modLogo === svcLogo,
+        `${modLogo.length} vs ${svcLogo.length} bytes`);
+}
+
 console.log('\n=== GET /v1/styles keeps the shape v0.4.x clients expect ===');
 const listed = svc.listStyles();
 check('one entry per style', listed.length === svcIds.length);

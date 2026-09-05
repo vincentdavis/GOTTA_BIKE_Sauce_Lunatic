@@ -112,6 +112,32 @@ const { body: styles } = await get('/v1/styles');
 if ((styles.data || []).length) pass('voices offered', styles.data.map(s => s.id).join(', '));
 else fail('voices offered', 'none');
 
+// --- the help page ---------------------------------------------------------
+// The service URL is the one value a rider types by hand, so it is also the one
+// they paste into a browser. A 404 there is a bad first impression.
+{
+    const res = await fetch(`${base}/`);
+    const body = await res.text().catch(() => '');
+    if (!res.ok) {
+        fail('help page served', `status ${res.status}`);
+    } else if (!/text\/html/.test(res.headers.get('content-type') || '')) {
+        fail('help page served', `content-type ${res.headers.get('content-type')}`);
+    } else if (!body.includes('Sauce Lunatic')) {
+        fail('help page served', 'served something, but not the help page');
+    } else {
+        pass('help page served', `${(body.length / 1024).toFixed(1)} KB`);
+    }
+    // The page states the service URL for riders to copy. If PUBLIC_URL and
+    // DISCORD_REDIRECT_URI are both unset it prints a placeholder, and every
+    // rider who follows it connects to nothing.
+    if (body.includes('your-service.up.railway.app')) {
+        warn('help page names this service',
+             'it shows a placeholder URL — set PUBLIC_URL or DISCORD_REDIRECT_URI');
+    } else if (res.ok) {
+        pass('help page names this service');
+    }
+}
+
 // --- full prompt definitions -----------------------------------------------
 // What a rider on their OWN API key fetches. If this is wrong, the mod keeps
 // working -- it falls back to the voices in its zip -- but improved wording

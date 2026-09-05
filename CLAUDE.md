@@ -69,6 +69,8 @@ Both HTML files import the same module and call different entry points:
 - Settings bags are namespaced by window-**instance** id, not by
   `data-settings-key`. A different mod can never see another's bag via
   `settingsStore` — only a raw `localStorage` scan can (see `migrateLegacySettings`).
+- `service/src/logo.mjs` is a byte-identical copy of `pages/images/logo.svg`, for the
+  pages the service renders. Same constraint, same parity test.
 - **`pages/src/prompts.mjs` and `service/src/styles.mjs` must stay byte-identical.**
   The mod ships only `pages/`, the service only `service/`, so neither can import
   the other and the table is written twice. `scripts/prompt-parity-test.mjs` is what

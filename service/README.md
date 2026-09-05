@@ -49,10 +49,19 @@ allowance. Paid licences are not built yet; the `tier` field on an account and
 | `GET /auth/discord/start` | Redirects to Discord. This is the URL the mod opens in a browser. |
 | `GET /auth/discord/callback` | Discord's redirect target. Creates or finds the account and shows the key. |
 | `GET /v1/models` | The aliases that are actually usable (model id **and** key present). |
-| `GET /v1/styles` | The announcer voices this service provides. |
+| `GET /v1/styles` | The announcer voices this service provides (id, label, description). |
+| `GET /v1/prompts` | Those voices in full, for a client that builds its own request. ETag + 304. |
 | `GET /v1/quota` | Remaining allowance, without spending a call. |
 | `POST /v1/chat/completions` | The commentary call. SSE unless `stream: false`. |
 | `GET /healthz` | Liveness, storage durability, today's spend, configured models. |
+| `GET /` (and `/help`) | The public help page: install steps, provider setup, troubleshooting. |
+
+The help page is rendered from this service's own configuration — the voices from
+`styles.mjs`, the models from `availableAliases()`, the monthly allowances from
+`config.mjs` — so its numbers cannot drift from what the API actually does. It
+prints the URL riders should paste into the mod, taken from `PUBLIC_URL` or
+`DISCORD_REDIRECT_URI`; with neither set it shows a placeholder and the smoke
+test warns.
 
 Auth is `Authorization: Bearer <device token>`. Send `X-Lunatic-Athlete: <zwift
 id>` when you have it — see *Identity* below.
