@@ -1,0 +1,20 @@
+/* APPROXIMATION of Sauce4Zwift's base stylesheet, which is not in this repo.
+   Dark host, key/label rows, material-symbol placeholders. Reviewers: judge the
+   mod's own structure, flow, copy and states — not these base colours. */
+html { background:#1a1a1a; color:#e6e6e6; font:14px/1.45 -apple-system,"Segoe UI",system-ui,sans-serif; }
+body { margin:0; }
+#titlebar header { display:flex; align-items:center; gap:.6em; padding:.45em .8em; background:#0f0f0f; border-bottom:1px solid #2a2a2a; }
+#titlebar .logo img { width:22px; height:22px; display:block; }
+#titlebar .title { font-weight:600; font-size:.95em; }
+#titlebar .filler { flex:1; }
+#titlebar .button { opacity:.7; cursor:pointer; }
+ms { font-family:ui-monospace,monospace; font-size:.85em; opacity:.85; }
+h2 { font-size:1.05em; margin:0 0 .5em; color:#fff; }
+label { display:flex; align-items:center; gap:.6em; margin:.45em 0; }
+key { display:inline-block; min-width:140px; color:#bdbdbd; font-size:.92em; }
+input[type=text], input[type=password], input[type=number], select, textarea {
+  background:#2b2b2b; color:#fff; border:1px solid #4a4a4a; border-radius:4px; padding:.35em .5em; font:inherit; }
+input[type=text], input[type=password] { width: calc(var(--size, 20) * 1ch); max-width:100%; }
+input[type=range] { width:160px; }
+button { font:inherit; }
+a { color:#8ab4d8; }

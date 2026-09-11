@@ -24,6 +24,9 @@ pages/src/prompt-diff.mjs      an LCS line diff, for showing what changed
 pages/css/announcer.css    styles
 pages/images/logo.svg      source of truth for the logo; PNGs are rendered from it
 scripts/lib/stub-dom.mjs   a DOM + Sauce `common` small enough to boot the mod in Node
+scripts/lib/browser-common-stub.mjs   the same `common` stub, for a real browser
+scripts/lib/sauce-common-approx.css   an APPROXIMATION of Sauce's base stylesheet
+scripts/settings-shots.mjs  screenshots every settings-window state in Chromium at 700×600
 scripts/settings-boot-test.mjs  boots the settings window
 scripts/overlay-boot-test.mjs   boots the overlay, incl. the ~1Hz nearby handler
 scripts/prompt-migration-test.mjs  legacy voice ids land where they should
@@ -43,6 +46,15 @@ fields (API key included) visible at once. Separate processes, because
 The stub `settingsStore` really dispatches `changed` and `set`, so a test can drive
 the live-update paths the way the settings window does — which is how the overlay's
 stale cost readout was found.
+
+To *see* the settings window rather than merely execute it, `node
+scripts/settings-shots.mjs` serves `pages/` with the browser stub and a mock of the
+hosted service, drives 14 states (each tab, each provider, connected/anonymous/Discord,
+the prompt editor, the update notice with its diff open) and writes viewport +
+full-page PNGs to `build/shots/`. Needs a global Playwright; deliberately not in CI.
+Sauce opens the window at **700×600** — judge everything at that size. The base
+stylesheet is an approximation and `<ms>` icons are placeholder glyphs; the mod's own
+`announcer.css` is real.
 
 Both HTML files import the same module and call different entry points:
 `lunaticAnnouncerMain()` and `lunaticAnnouncerSettingsMain()`.
