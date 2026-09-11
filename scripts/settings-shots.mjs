@@ -90,7 +90,10 @@ export const STATES = [
         compatBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', compatApiKey: 'AIzaEXAMPLE', compatModel: 'gemini-2.5-flash' }, tab: 'api-tab' },
     { name: '05-api-hosted-disconnected', seed: { ...HOSTED }, tab: 'api-tab' },
     { name: '06-api-hosted-anon-connected', seed: { ...HOSTED, '/gotta-bike-lunatic-device-token': 'lun_mock_device_token', '/gotta-bike-lunatic-quota': 137 }, tab: 'api-tab' },
-    { name: '07-api-hosted-discord', seed: { ...HOSTED, '/gotta-bike-lunatic-device-token': 'lun_acct_mock', '/gotta-bike-lunatic-quota': 380,
+    // 'luna_' is the account-key prefix tokenKind() recognises; 'lun_' is an
+    // anonymous device token. The first cut of this harness got that wrong and
+    // the "Discord" state silently rendered as Anonymous — a review caveat.
+    { name: '07-api-hosted-discord', seed: { ...HOSTED, '/gotta-bike-lunatic-device-token': 'luna_acct_mock', '/gotta-bike-lunatic-quota': 380,
         '/gotta-bike-lunatic-account': { name: 'vincent' } }, tab: 'api-tab' },
     { name: '08-prompts-builtin', seed: { ...HOSTED }, tab: 'prompts-tab' },
     { name: '09-prompts-own-editing', seed: KEYED, tab: 'prompts-tab',
