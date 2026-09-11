@@ -480,12 +480,48 @@ body:not(.transparent-bg) {
 }
 
 /* API Info */
+/* Tinted by STATE. Neutral until a test or connection actually succeeds --
+   green used to be unconditional, which made a saved-but-mistyped key look
+   like success and the Test Connection button look optional. */
 .api-info {
     margin-top: 1em;
     padding: 0.8em;
-    background: rgba(76, 175, 80, 0.1);
-    border: 1px solid rgba(76, 175, 80, 0.3);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 4px;
+}
+
+.api-info.connected {
+    background: rgba(76, 175, 80, 0.1);
+    border-color: rgba(76, 175, 80, 0.3);
+}
+
+.api-info.failed {
+    background: rgba(215, 90, 68, 0.1);
+    border-color: rgba(215, 90, 68, 0.35);
+}
+
+.api-info.failed .api-value { color: #efb3a8; }
+.api-info.stale .api-value { color: #e0a33a; }
+
+.api-next-step {
+    margin: 0.6em 0 0;
+    font-size: 0.9em;
+    color: #cfd8dd;
+}
+
+.api-next-step[hidden] { display: none !important; }
+
+.no-key-hint,
+.setup-nudge {
+    color: #e0a33a;
+}
+
+.no-key-hint[hidden],
+.setup-nudge[hidden] { display: none !important; }
+
+.setup-nudge {
+    margin: 0 0 0.8em;
 }
 
 .api-info-row {

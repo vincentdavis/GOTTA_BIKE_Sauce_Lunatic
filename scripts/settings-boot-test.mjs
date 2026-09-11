@@ -32,7 +32,14 @@ const rows = {
     shared: makeEl('button', { provider: 'anthropic compatible' })
 };
 
-installGlobals({ providerRows: Object.values(rows) });
+// The tab strip, so first-run landing and tab memory can be driven.
+const tabBtns = ['settings-tab', 'api-tab', 'prompts-tab', 'data-tab', 'help-tab']
+    .map(id => makeEl('button', { tab: id }));
+const tabPanels = tabBtns.map(b => { const p = makeEl('div'); p.id = b.dataset.tab; return p; });
+const activeTab = () => tabBtns.find(b => b._classes.has('active'))?.dataset.tab;
+
+installGlobals({ providerRows: Object.values(rows),
+                 selectors: { '.tab-btn': tabBtns, '.tab-panel': tabPanels } });
 const { mod, common: { settingsStore } } = await loadAnnouncer();
 
 section('the settings window boots at all');
@@ -45,6 +52,68 @@ try {
 check('lunaticAnnouncerSettingsMain() runs to completion', !bootErr,
     bootErr ? `${bootErr.constructor.name}: ${bootErr.message}` : '');
 bailOnBootFailure(bootErr);
+
+section('F02: first run lands on the provider tab');
+check('unconfigured, the window opens on AI Provider', activeTab() === 'api-tab', String(activeTab()));
+check('and the Settings tab carries a nudge', el('setup-nudge').hidden === false);
+fire(tabBtns[2], 'click');
+check('clicking a tab activates it', activeTab() === 'prompts-tab', String(activeTab()));
+check('and remembers it', settingsStore.get('settingsTab') === 'prompts-tab');
+
+section('F03/F04: the status box before a key exists');
+check('the status box is shown, not hidden', el('api-info').hidden === false);
+check('and says what to do', /Not configured — pick Lunatic hosted/.test(el('api-status-text').textContent),
+    el('api-status-text').textContent);
+check('it is not tinted green', !el('api-info').className.includes('connected'), el('api-info').className);
+check('the "No key?" hint shows on a keyed provider', el('no-key-hint').hidden === false);
+fire(el('test-api-btn'), 'click');
+check('testing with no key says what to paste', el('api-test-status').textContent === 'Paste your Anthropic API key first.',
+    el('api-test-status').textContent);
+
+section('F04: a saved key is "not tested", not "Connected"');
+settingsStore.set('claudeApiKey', 'sk-ant-api03-not-a-real-key');
+check('the box says saved, not tested', el('api-status-text').textContent === 'Key saved — not tested',
+    el('api-status-text').textContent);
+check('still not green', el('api-info').className === 'api-info untested', el('api-info').className);
+check('the No key? hint goes away', el('no-key-hint').hidden === true);
+check('so does the Settings nudge', el('setup-nudge').hidden === true);
+check('no next-step until something actually connects', el('api-next-step').hidden === true);
+
+// Only a successful REQUEST may turn the box green. Drive the real Test
+// Connection handler with a stubbed fetch, then change a setting.
+const settle = async () => { for (let i = 0; i < 5; i++) await new Promise(r => setTimeout(r, 0)); };
+globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({}), headers: { get: () => null } });
+fire(el('test-api-btn'), 'click');
+await settle();
+check('a passing test turns the box green', el('api-info').className === 'api-info connected',
+    el('api-info').className);
+check('and says Connected', el('api-status-text').textContent === 'Connected');
+check('the inline result agrees', el('api-test-status').className === 'success', el('api-test-status').textContent);
+check('and the next step appears', el('api-next-step').hidden === false &&
+    /Close this window and ride/.test(el('api-next-step').textContent), el('api-next-step').textContent);
+check('mentioning speech is off, because it is', /Speech is off/.test(el('api-next-step').textContent));
+
+settingsStore.set('claudeModel', 'claude-sonnet-5');
+check('changing a setting downgrades the box', el('api-info').className === 'api-info stale',
+    el('api-info').className);
+check('to "changed since the last test"', /changed since the last test/.test(el('api-status-text').textContent),
+    el('api-status-text').textContent);
+check('and clears the stale "Connection successful!"', el('api-test-status').textContent === '',
+    JSON.stringify(el('api-test-status').textContent));
+check('the next step is withdrawn', el('api-next-step').hidden === true);
+
+globalThis.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: { message: 'invalid x-api-key' } }),
+    headers: { get: () => null } });
+fire(el('test-api-btn'), 'click');
+await settle();
+check('a failing test turns the box red', el('api-info').className === 'api-info failed', el('api-info').className);
+check('and says so', /Test failed/.test(el('api-status-text').textContent), el('api-status-text').textContent);
+globalThis.fetch = async () => { throw new Error('no network in this test'); };
+
+settingsStore.set('claudeApiKey', '');
+check('clearing the key returns to Not configured',
+    /Not configured/.test(el('api-status-text').textContent), el('api-status-text').textContent);
+settingsStore.set('claudeApiKey', 'sk-ant-api03-not-a-real-key');
 
 section('the provider visibility pass ran');
 check('anthropic rows shown', !hidden(rows.anthropic));

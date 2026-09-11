@@ -98,6 +98,9 @@ let groupsData = [];
 let watchingAthlete = null;
 let isStreaming = false;
 let isPaused = true;
+// Whether a provider was usable at the last check; startCommentary() fires on
+// the false -> true edge. See that function for why this exists.
+let providerReady = false;
 let updateTimer = null;
 let conversationHistory = [];
 let commentaryHistory = [];
@@ -351,6 +354,13 @@ export async function lunaticAnnouncerMain() {
         // Any provider setting can flip "configured" — not just the Claude key.
         if (PROVIDER_SETTING_KEYS.some(k => changed.has(k))) {
             updateApiStatus();
+            // The first-run edge: a provider just became usable while this
+            // window sat paused on the placeholder. Start, once, on that edge
+            // only -- not on every provider edit, which would un-pause a rider
+            // who paused on purpose.
+            const ready = isProviderConfigured();
+            if (ready && !providerReady) startCommentary();
+            providerReady = ready;
             // The cost readout is provider-shaped: the hosted service shows an
             // allowance, everything else a dollar figure. Without this it keeps
             // the OLD provider's reading until the next call happens to write a
@@ -390,15 +400,36 @@ export async function lunaticAnnouncerMain() {
         }
     });
 
-    // Start auto-update if configured and API is ready, respecting the saved
-    // pause state so we don't force-resume (and spend) on every window open.
-    if (isProviderConfigured()) {
-        const ph = document.querySelector('#current-commentary .placeholder-text');
-        if (ph) ph.textContent = 'Waiting for ride data…';
-        isPaused = common.settingsStore.get('commentaryPaused') ?? false;
-        updatePauseButton();
-        if (!isPaused) restartAutoUpdate();
-    }
+    // Start if a provider is already usable. If not, the settings listener
+    // above starts it the moment one becomes usable -- see startCommentary().
+    providerReady = isProviderConfigured();
+    if (providerReady) startCommentary();
+}
+
+/**
+ * The moment a provider is usable: replace the "pick a provider" placeholder,
+ * restore the saved pause state, and start the scheduler.
+ *
+ * This used to run only at boot. But the gear lives on the overlay, so on every
+ * first run a rider configures their key WITH THIS WINDOW OPEN -- and came back
+ * to an overlay still paused, still telling them to pick a provider, with the
+ * API dot green. The only ways out were unlabelled: press play, or reopen the
+ * window. Now it also runs from the `changed` listener the first time
+ * isProviderConfigured() flips to true.
+ *
+ * `commentaryPaused` is honoured, not overridden: a rider who paused on purpose
+ * and then swaps providers should stay paused. Only a rider who was never able
+ * to start gets started.
+ */
+function startCommentary() {
+    const ph = document.querySelector('#current-commentary .placeholder-text');
+    if (ph) ph.textContent = 'Waiting for ride data…';
+    isPaused = common.settingsStore.get('commentaryPaused') ?? false;
+    // Let the next real data tick count as a fresh start rather than waiting
+    // out a full interval.
+    firstDataFired = false;
+    updatePauseButton();
+    if (!isPaused) restartAutoUpdate();
 }
 
 /**
@@ -1646,9 +1677,13 @@ export async function lunaticAnnouncerSettingsMain() {
             renderPromptEditor();
             renderPromptNotice();
         }
-        // The editor says whether this prompt is what actually gets sent, which
-        // depends on the provider chosen on the other tab.
+        // Any provider setting moving means the Status box may be wrong: a
+        // "Connected" earned by a test no longer describes the new model or
+        // key. The form-bound controls (the Claude Model select, the compat
+        // fields) write the store directly and never called this before, so
+        // a rider could swap models after a passing test and keep the green.
         if (PROVIDER_SETTING_KEYS.some(k => changed.has(k))) {
+            updateApiInfo();
             renderPromptProviderNote();
             renderHelpLink();
         }
@@ -1658,21 +1693,38 @@ export async function lunaticAnnouncerSettingsMain() {
     updateCustomColorVisibility();
 }
 
-function setupTabs() {
+/** Show one tab. Exported to the rest of the file, not just the tab strip. */
+function activateTab(tabId) {
     const tabBtns = document.querySelectorAll('.tab-btn');
     const tabPanels = document.querySelectorAll('.tab-panel');
+    if (![...tabBtns].some(b => b.dataset.tab === tabId)) return false;
+    tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
+    tabPanels.forEach(p => p.classList.toggle('active', p.id === tabId));
+    return true;
+}
 
-    tabBtns.forEach(btn => {
+function setupTabs() {
+    for (const btn of document.querySelectorAll('.tab-btn')) {
         btn.addEventListener('click', () => {
-            const tabId = btn.dataset.tab;
-
-            tabBtns.forEach(b => b.classList.remove('active'));
-            tabPanels.forEach(p => p.classList.remove('active'));
-
-            btn.classList.add('active');
-            document.getElementById(tabId)?.classList.add('active');
+            activateTab(btn.dataset.tab);
+            // Remembered per window, so a rider heading to Prompts every
+            // session is not routed through Display Options first.
+            common.settingsStore.set('settingsTab', btn.dataset.tab);
         });
-    });
+    }
+    // Anything in the page can send a rider to a tab: the Settings-tab nudge.
+    for (const link of document.querySelectorAll('[data-goto-tab]')) {
+        link.addEventListener('click', ev => {
+            ev.preventDefault();
+            activateTab(link.dataset.gotoTab);
+        });
+    }
+
+    // Where to open. The overlay's only instruction is "pick an AI provider",
+    // and the gear used to land on Font scaling with nothing pointing one tab
+    // over. Unconfigured -> the provider tab; otherwise where they last were.
+    const remembered = common.settingsStore.get('settingsTab');
+    activateTab(!isProviderConfigured() ? 'api-tab' : (remembered || 'settings-tab'));
 }
 
 /** Show/hide toggle plus trim-on-save for one API key field. */
@@ -1714,7 +1766,12 @@ async function setupTestConnection() {
 
     testBtn.addEventListener('click', async () => {
         if (!isProviderConfigured()) {
-            statusEl.textContent = `${activeProvider().label} is not configured`;
+            // Say what to do, not what is missing in the abstract.
+            statusEl.textContent = {
+                anthropic: 'Paste your Anthropic API key first.',
+                compatible: 'Enter a model id (and your key, if the service needs one) first.',
+                hosted: 'Press Connect first.'
+            }[activeProviderId()] || `${activeProvider().label} is not configured`;
             statusEl.className = 'error';
             return;
         }
@@ -1755,38 +1812,112 @@ async function setupTestConnection() {
                 const info = prov.parseHttpError(response.status, body, response.headers);
                 statusEl.textContent = info.message;
                 statusEl.className = 'error';
+                markApiTestFailed();
             }
         } catch (err) {
             statusEl.textContent = `Error: ${err.message}`;
             statusEl.className = 'error';
+            markApiTestFailed();
         } finally {
             testBtn.disabled = false;
         }
     });
 }
 
+/**
+ * What the last Test Connection / Connect actually said. `updateApiInfo()` reads
+ * it so a green box means "a request succeeded", never merely "a field has
+ * text in it" -- which is what it used to mean, and why a mistyped key looked
+ * like success and Test Connection looked optional.
+ *   'none'   nothing tested since the settings last changed
+ *   'ok'     the last test or connect succeeded
+ *   'failed' the last test failed
+ */
+let apiTestOutcome = 'none';
+
+/**
+ * The Status box on the AI Provider tab. Always visible; tinted by state.
+ *
+ * @param {boolean} connected  a request just succeeded (Test Connection, Connect,
+ *   sign-in, the hosted on-open refresh). Anything else is a settings change,
+ *   which downgrades a previous success to "changed since the last test".
+ */
 function updateApiInfo(connected = false) {
+    if (connected) {
+        apiTestOutcome = 'ok';
+    } else if (apiTestOutcome === 'ok' || apiTestOutcome === 'failed') {
+        // A result that is no longer known to hold, either way: the rider
+        // changed something since. Clear the inline "Connection successful!"
+        // / error line too, or it sits beside the downgrade contradicting it.
+        apiTestOutcome = 'stale';
+        const testStatus = document.getElementById('api-test-status');
+        if (testStatus) { testStatus.textContent = ''; testStatus.className = ''; }
+    }
+    renderApiInfo();
+}
+
+/** Record a failed Test Connection so the Status box turns red, not stays green. */
+function markApiTestFailed() {
+    apiTestOutcome = 'failed';
+    renderApiInfo();
+}
+
+/** Paint the Status box from `apiTestOutcome` and the current settings. No transitions. */
+function renderApiInfo() {
     const configured = isProviderConfigured();
     const infoEl = document.getElementById('api-info');
     const statusText = document.getElementById('api-status-text');
     const modelText = document.getElementById('api-model-text');
+    const nextStep = document.getElementById('api-next-step');
+    const noKeyHint = document.getElementById('no-key-hint');
+    const nudge = document.getElementById('setup-nudge');
+
+    if (!configured) apiTestOutcome = 'none';
+
+    const providerId = activeProviderId();
+    let state, text;
+    if (!configured) {
+        state = 'unconfigured';
+        text = 'Not configured — pick Lunatic hosted for free commentary, or paste an API key.';
+    } else if (apiTestOutcome === 'ok') {
+        state = 'connected';
+        text = 'Connected';
+    } else if (apiTestOutcome === 'failed') {
+        state = 'failed';
+        text = 'Test failed — check your key and model';
+    } else if (apiTestOutcome === 'stale') {
+        state = 'stale';
+        text = 'Configured — settings changed since the last test';
+    } else {
+        state = 'untested';
+        text = providerId === 'hosted' ? 'Saved — not checked yet' : 'Key saved — not tested';
+    }
 
     if (infoEl) {
-        infoEl.hidden = !configured;
+        infoEl.hidden = false;
+        infoEl.className = `api-info ${state}`;
     }
-
     if (statusText) {
-        if (configured) {
-            statusText.textContent = connected ? 'Connected' : 'Configured';
-            statusText.classList.toggle('connected', connected);
-        } else {
-            statusText.textContent = 'Not configured';
+        statusText.textContent = text;
+        statusText.classList.toggle('connected', state === 'connected');
+    }
+    if (modelText) {
+        modelText.textContent = configured
+            ? `${activeProvider().label} · ${activeModel() || '(no model set)'}`
+            : '—';
+    }
+    // The one thing a first-run rider needs to be told, at the moment it is true.
+    if (nextStep) {
+        nextStep.hidden = state !== 'connected';
+        if (state === 'connected') {
+            const tts = common.settingsStore.get('ttsEnabled');
+            nextStep.textContent = 'Close this window and ride — commentary fires when riders are ' +
+                'around you.' + (tts ? '' : ' Speech is off; turn it on under Settings › Announcer Audio.');
         }
     }
-
-    if (modelText) {
-        modelText.textContent = `${activeProvider().label} · ${activeModel() || '(no model set)'}`;
-    }
+    // A rider with no key, looking at a provider that needs one.
+    if (noKeyHint) noKeyHint.hidden = configured || providerId === 'hosted';
+    if (nudge) nudge.hidden = configured;
 }
 
 /**
@@ -2089,7 +2220,7 @@ function setupHostedControls() {
 
     // Already set up? Refresh quietly on open so the allowance is current.
     if (activeProviderId() === 'hosted' && isProviderConfigured()) {
-        refresh().then(() => setStatus('Connected', 'success'))
+        refresh().then(() => { setStatus('Connected', 'success'); updateApiInfo(true); })
                  .catch(err => setStatus(err.message || 'Service unreachable', 'error'));
     }
 }

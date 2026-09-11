@@ -141,17 +141,18 @@ export const el = id => {
 };
 
 /**
- * @param {object[]} providerRows elements returned for `[data-provider]`, the
- *   selector whose visibility pass is the thing most worth asserting on.
+ * @param {object[]} providerRows elements returned for `[data-provider]`.
+ * @param {Object<string, object[]>} selectors extra `querySelectorAll` answers,
+ *   e.g. { '.tab-btn': [...], '.tab-panel': [...] } so tab logic can be driven.
  */
-export function installGlobals({ providerRows = [] } = {}) {
+export function installGlobals({ providerRows = [], selectors = {} } = {}) {
     globalThis.document = {
         readyState: 'complete',
         body: makeEl('body'),
         documentElement: makeEl('html'),
         getElementById: el,
         querySelector: sel => el(`sel:${sel}`),
-        querySelectorAll: sel => (sel === '[data-provider]' ? providerRows : []),
+        querySelectorAll: sel => selectors[sel] || (sel === '[data-provider]' ? providerRows : []),
         createElement: makeEl,
         createTextNode: t => ({ textContent: t }),
         addEventListener: () => {}

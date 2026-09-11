@@ -115,6 +115,16 @@ Both HTML files import the same module and call different entry points:
   which runs on every window open; that would have reimposed an old hosted voice any
   time a rider returned to the default, and wiped a `usr-` id the day the library
   landed. `activeId()` already falls back at read time, so nothing needs re-running.
+- **The Status box on the AI Provider tab goes green only when a request succeeded.**
+  `updateApiInfo(true)` is the sole way in (Test Connection, Connect, sign-in, the
+  hosted on-open refresh); any provider setting changing afterwards downgrades it to
+  "changed since the last test" via the settings window's store listener. It used to
+  be green whenever a key field had text, so a mistyped key looked like success.
+- **The overlay must start when a provider becomes usable, not only at boot.** The gear
+  lives on the overlay, so every first-run rider configures their key with the overlay
+  open; `startCommentary()` fires on the false→true edge of `isProviderConfigured()` in
+  the overlay's store listener. Honour `commentaryPaused` there — a deliberate pause
+  survives a provider swap.
 - Keys with a leading `/` are **global and shared across all mods** on the Sauce
   origin. That is why `ATHLETE_DATA_KEY` can read GOTTA.BIKE's imported data, and
   why our own counters must NOT reuse GOTTA's key strings.
@@ -144,6 +154,7 @@ Both HTML files import the same module and call different entry points:
 'builtinPrompts'                     // per-window: voices fetched from the service
 'promptUpdates'                      // per-window: 'auto' (default) | 'off'
 'promptUpdateNotice'                 // per-window: the undismissed "voices updated" line
+'settingsTab'                        // per-window: the tab the settings window last showed
 '/gotta-bike-sauce-athlete-data'     // READ-ONLY, written by GOTTA.BIKE sauce
 'lunatic-announcer-settings-v1'      // per-window bag (data-settings-key)
 ```

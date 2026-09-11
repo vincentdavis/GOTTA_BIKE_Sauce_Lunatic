@@ -51,8 +51,27 @@ check('and a tooltip', !!auto.title, auto.title);
 section('configuring a provider live updates the dot');
 // Through settingsStore, so this exercises the overlay's own `changed`
 // listener rather than calling the internal function directly.
+const placeholder = document.querySelector('#current-commentary .placeholder-text');
+placeholder.textContent = 'Pick an AI provider in settings…';
+check('before: the overlay is paused', auto._classes.has('paused'));
 settingsStore.set('claudeApiKey', 'sk-ant-api03-not-a-real-key');
 check('the dot goes connected', api._classes.has('connected'), [...api._classes].join(' '));
+
+section('F01: configuring a provider with the overlay open STARTS it');
+// The gear lives on the overlay, so this is every first run. It used to leave
+// the overlay paused, still saying "Pick an AI provider", with the dot green.
+check('the placeholder no longer says to pick a provider',
+    placeholder.textContent === 'Waiting for ride data…', placeholder.textContent);
+check('and it is no longer paused', !auto._classes.has('paused'), [...auto._classes].join(' '));
+check('the pause button shows the running state', el('pause-btn')._classes.has('active'));
+
+// A rider who paused ON PURPOSE and then swaps provider must stay paused.
+settingsStore.set('commentaryPaused', true);
+settingsStore.set('claudeApiKey', '');            // unconfigured again
+settingsStore.set('claudeApiKey', 'sk-ant-api03-another-key');
+check('a deliberate pause survives a provider change', auto._classes.has('paused'),
+    [...auto._classes].join(' '));
+settingsStore.set('commentaryPaused', false);
 check('and drops not-configured', !api._classes.has('not-configured'));
 check('the tooltip names the provider', /ready/.test(api.title), api.title);
 
