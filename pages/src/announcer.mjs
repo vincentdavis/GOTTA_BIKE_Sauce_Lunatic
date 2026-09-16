@@ -1682,6 +1682,7 @@ export async function lunaticAnnouncerSettingsMain() {
     updateApiInfo();
 
     renderHelpLink();
+    renderHelpVoices();
 
     // Render shared cost counters and keep them live across windows.
     renderCost();
@@ -1697,6 +1698,7 @@ export async function lunaticAnnouncerSettingsMain() {
             renderPromptPicker();
             renderPromptEditor();
             renderPromptNotice();
+            renderHelpVoices();     // the cache is where a new voice arrives
         }
         // Any provider setting moving means the Status box may be wrong: a
         // "Connected" earned by a test no longer describes the new model or
@@ -2197,7 +2199,7 @@ function setupHostedControls() {
 
     /** Pull the model list, the voices, and the remaining allowance. */
     async function refresh() {
-        // Models only. The voice comes from the Prompts tab now, and it is the
+        // Models only. The voice comes from the Voices tab now, and it is the
         // same list on every provider, so there is nothing to fetch for it.
         const models = await getJson('/v1/models');
         fill(modelSel, (models.data || []).map(m => ({
@@ -2571,7 +2573,7 @@ function toggleDiff(viewId, buildParts) {
 }
 
 /**
- * The "a voice was improved" line at the top of the Prompts tab.
+ * The "a voice was improved" line at the top of the Voices tab.
  *
  * A line on the tab a rider is already looking at, dismissible, and nothing in
  * the overlay -- an announcer changing wording is news, not an interruption
@@ -2623,21 +2625,45 @@ function checkPromptUpdates() {
             renderPromptPicker();
             renderPromptEditor();
             renderPromptNotice();
+            renderHelpVoices();
         })
         .catch(err => console.warn('[Lunatic] prompt update check failed:', err));
 }
 
 /**
- * Point the Help tab's link at the service actually in use.
+ * Point every link to the online help at the service actually in use.
  *
  * Not hardcoded: the base URL is a setting, and someone running their own
  * deployment should reach their own page — which is also the only one whose
  * quotas and model list will match what they are getting.
  */
 function renderHelpLink() {
-    const link = document.getElementById('help-site-link');
-    if (!link) return;
-    link.href = `${promptUpdates.serviceUrlFor(common.settingsStore)}/help`;
+    const url = `${promptUpdates.serviceUrlFor(common.settingsStore)}/help`;
+    for (const link of document.querySelectorAll('.help-online-link')) link.href = url;
+}
+
+/**
+ * The list of built-in voices on the Help tab, from the library rather than
+ * from prose.
+ *
+ * Help used to carry a hand-written list. It drifted: by v0.8.2 it named two
+ * of four voices and described the pre-library design where a hosted rider
+ * picked a voice somewhere else. library.listBuiltins() is the server cache
+ * over the bundled table, so a voice the service adds or rewords shows up here
+ * the day it arrives.
+ */
+function renderHelpVoices() {
+    const dl = document.getElementById('help-voices');
+    if (!dl) return;
+    dl.textContent = '';                        // replace, never append
+    for (const v of library.listBuiltins(common.settingsStore)) {
+        const dt = document.createElement('dt');
+        dt.textContent = v.label;
+        const dd = document.createElement('dd');
+        dd.textContent = v.description;
+        dl.appendChild(dt);
+        dl.appendChild(dd);
+    }
 }
 
 function setupPromptLibrary() {

@@ -114,7 +114,10 @@ export const STATES = [
 
 // ---------------------------------------------------------------------------
 mkdirSync(OUT, { recursive: true });
-const browser = await chromium.launch();
+// CHROMIUM_PATH lets a machine whose browser build does not match the local
+// Playwright version point at the one it has, rather than downloading another.
+const browser = await chromium.launch(
+    process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 const manifest = [];
 let pageErrors = 0;
 for (const st of STATES) {

@@ -65,6 +65,11 @@ code { background:#0E1418; border:1px solid #26323A; border-radius:4px; padding:
 .voice dt { color:#E9A63F; font-size:15px; }
 .voice dd { margin:0; color:#A0AEB4; }
 
+.rates { border-collapse:collapse; margin:10px 0; font-size:15px; }
+.rates th, .rates td { text-align:left; padding:4px 18px 4px 0; border-bottom:1px solid #26323A; }
+.rates th { color:#93A2A9; font-weight:500; font-size:14px; }
+.rates td:not(:first-child) { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:14px; }
+
 .note { border-left:3px solid #4f9ad6; background:rgba(79,154,214,.1);
         border-radius:4px; padding:12px 14px; margin:16px 0; font-size:15px; }
 .warn { border-left-color:#E9A63F; background:rgba(233,166,63,.1); }
@@ -157,6 +162,15 @@ switch between them whenever you like.</p>
   <p>Create a key at <a href="https://console.anthropic.com">console.anthropic.com</a>, paste it
   in, and pick a model. Usage is billed to your account — the overlay shows a running total,
   and a typical line costs a fraction of a cent.</p>
+  <table class="rates">
+    <tr><th>Model</th><th>Input / 1M</th><th>Output / 1M</th></tr>
+    <tr><td>Claude Haiku 4.5</td><td>$1.00</td><td>$5.00</td></tr>
+    <tr><td>Claude Sonnet 5</td><td>$2.00</td><td>$10.00</td></tr>
+    <tr><td>Claude Opus 5</td><td>$5.00</td><td>$25.00</td></tr>
+  </table>
+  <p class="meta">A call sends about 1,000 tokens and gets back about 60 — roughly $0.0013 on
+  Haiku, or $0.10–0.40 an hour depending on how eventful the race is. These are the rates the
+  mod's own cost readout uses.</p>
 </div>
 
 <div class="card">
@@ -165,10 +179,14 @@ switch between them whenever you like.</p>
   key, and enter a model id.</p>
   <p class="meta">Model ids are free text on purpose: they change often, so paste whatever your
   provider currently offers rather than waiting for the mod to catch up.</p>
+  <p class="meta">The mod ships no price list for these, so the cost readout stays untracked
+  until you type the per-million rates into the <strong>Cost in $/1M</strong> fields. It will
+  not guess — quoting a local Ollama run at Haiku rates would be worse than admitting it does
+  not know.</p>
 </div>
 
 <h2>The voices</h2>
-<p>Pick one on the <strong>Prompts</strong> tab. The same voice works on every provider.</p>
+<p>Pick one on the <strong>Voices</strong> tab. The same voice works on every provider.</p>
 <dl class="voice">
     ${voiceList()}
 </dl>
@@ -182,9 +200,8 @@ dropdown under <em>Your prompts</em>.</p>
 The <strong>user message template</strong> is the race data, with placeholders
 (<code>{riders}</code>, <code>{events}</code>, <code>{raceContext}</code> and so on) filled in
 each time.</p>
-<div class="note warn">On the free hosted service your own prompt is <strong>not</strong> used —
-this service supplies the announcer's instructions there. Use your own API key to hear what you
-wrote.</div>
+<div class="note warn">On Lunatic hosted your own prompt is <strong>not</strong> used — this
+service supplies the announcer's instructions. Use your own API key to hear what you wrote.</div>
 <p>When a built-in voice is improved, the mod picks up the new wording and tells you what
 changed. Anything you wrote yourself is never touched.</p>
 
@@ -214,7 +231,7 @@ changed. Anything you wrote yourself is never touched.</p>
   <li>On the hosted option, the rider data around you — names, power, heart rate, gaps —
       is sent here and passed to the model. Nothing is kept after the reply.</li>
   <li>The mod checks this service once a day for improved voices. That request carries no
-      key, no account and no rider data, and you can turn it off on the Prompts tab.</li>
+      key, no account and no rider data, and you can turn it off on the Voices tab.</li>
 </ul>
 
 <footer>

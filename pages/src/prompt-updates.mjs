@@ -47,7 +47,7 @@ export function serviceUrlFor(store) {
 
 export function updatesEnabled(store) {
     // Default on: it is the only way an installed zip ever improves, and the
-    // request is anonymous. One click on the Prompts tab turns it off.
+    // request is anonymous. One click on the Voices tab turns it off.
     return (store.get(UPDATES_KEY) ?? 'auto') !== 'off';
 }
 
@@ -225,7 +225,7 @@ export function dismissNotice(store) {
     }
 }
 
-/** One line a person can read, for the notice at the top of the Prompts tab. */
+/** One line a person can read, for the notice at the top of the Voices tab. */
 export function describeNotice(notice) {
     if (!notice) return '';
     const bits = [];

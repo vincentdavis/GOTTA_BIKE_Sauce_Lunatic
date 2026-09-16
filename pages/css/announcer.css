@@ -931,6 +931,23 @@ body:not(.transparent-bg) {
     color: #fff;
 }
 
+/* The built-in voice list, rendered from library.listBuiltins(). A definition
+   list rather than a paragraph, so a fifth voice costs no layout thought. */
+.help-voices {
+    margin: 0 0 1em 0;
+    color: #ccc;
+    line-height: 1.6;
+}
+
+.help-voices dt {
+    color: #fff;
+    font-weight: 600;
+}
+
+.help-voices dd {
+    margin: 0 0 0.5em 0;
+}
+
 /* ============================================================================
    Responsive Adjustments
    ============================================================================ */

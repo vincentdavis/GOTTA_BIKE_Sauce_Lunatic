@@ -27,7 +27,7 @@
     <div class="tab-navigation">
         <button type="button" class="tab-btn active" data-tab="settings-tab">Settings</button>
         <button type="button" class="tab-btn" data-tab="api-tab">AI Provider</button>
-        <button type="button" class="tab-btn" data-tab="prompts-tab">Prompts</button>
+        <button type="button" class="tab-btn" data-tab="prompts-tab">Voices</button>
         <button type="button" class="tab-btn" data-tab="data-tab">Data Fields</button>
         <button type="button" class="tab-btn" data-tab="help-tab">Help</button>
     </div>
@@ -119,7 +119,7 @@
                         <input type="checkbox" name="ttsEnabled"/>
                     </label>
                     <label>
-                        <key>Voice:</key>
+                        <key>Speaking voice:</key>
                         <select name="ttsVoice" id="tts-voice"></select>
                     </label>
                     <label>
@@ -154,8 +154,8 @@
                 <!-- One intro per provider. A single sentence here used to say
                      "you supply a key ... billed to you" above the free option. -->
                 <p class="help-text" data-provider="hosted">Free commentary from the Lunatic service
-                    &mdash; no key, nothing billed to you. The rider data around you is sent to the
-                    service to write the lines.</p>
+                    &mdash; no key, nothing billed to you. The names, power and heart rate of the
+                    riders around you are sent to the service to write the lines.</p>
                 <p class="help-text" data-provider="anthropic">Paste a key from
                     <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>.
                     Usage is billed to your Anthropic account.</p>
@@ -192,6 +192,11 @@
                             <option value="claude-opus-5">Claude Opus 5 (Most capable, slowest)</option>
                         </select>
                     </label>
+                    <p class="help-text" data-provider="anthropic">&approx; $0.0013 a call on Haiku
+                        &mdash; about $0.10&ndash;0.40 per hour of racing. Sonnet is roughly twice that,
+                        Opus five times. Full rates are on the
+                        <a class="help-online-link" href="#" target="_blank" rel="noreferrer">help
+                        page</a>.</p>
 
                     <!-- OpenAI-compatible: OpenAI, Gemini, OpenRouter, Groq, Ollama -->
                     <label data-provider="compatible">
@@ -257,7 +262,7 @@
                     </label>
 
                     <p class="help-text">The announcer's voice is chosen on the
-                        <strong>Prompts</strong> tab, and applies here too.</p>
+                        <strong>Voices</strong> tab, and applies here too.</p>
                 </div>
 
                 <p class="help-text" data-provider="compatible" id="compat-hint"></p>
@@ -283,14 +288,6 @@
                     <span id="hosted-quota"></span>
                 </p>
 
-                <p class="help-text" data-provider="hosted">Signing in with Discord gives you a bigger
-                    monthly allowance and a key that survives a reinstall &mdash; sign in again anywhere
-                    and you get the same one back. Connecting anonymously works without an account, but
-                    the allowance is smaller and clearing your settings loses it.</p>
-
-                <p class="help-text" data-provider="hosted">The built-in voices on the Prompts tab
-                    all work here. A <em>custom</em> prompt of your own does not &mdash; on the free
-                    tier the service supplies the announcer's instructions, and yours is discarded.</p>
 
                 <div class="api-actions" data-provider="anthropic compatible">
                     <button type="button" id="test-api-btn">Test Connection</button>
@@ -311,6 +308,14 @@
                     </div>
                     <p class="api-next-step" id="api-next-step" hidden></p>
                 </div>
+
+                <p class="help-text" data-provider="hosted"><strong>Sign in with Discord</strong> for a
+                    bigger monthly allowance and a key that comes back after a reinstall.
+                    <strong>Connect anonymously</strong> needs no account, but the allowance is smaller
+                    and clearing your settings loses it.</p>
+
+                <p class="help-text" data-provider="hosted">Built-in voices all work on Lunatic hosted.
+                    A prompt you wrote is not used here &mdash; use your own API key to hear it.</p>
             </section>
 
             <section class="settings-section">
@@ -334,7 +339,7 @@
     <div id="prompts-tab" class="tab-panel">
         <div class="settings-content">
             <section class="settings-section">
-                <h2>Commentary Style</h2>
+                <h2>Voice</h2>
                 <p class="help-text">One voice setting, for whichever provider you are using.</p>
 
                 <!-- Shown by renderPromptNotice() after the service sends an
@@ -572,7 +577,7 @@
                 <!-- href is set at runtime from the service URL in use, so a rider
                      running their own instance gets their own page. -->
                 <p class="help-site-link">
-                    <a id="help-site-link" href="#" target="_blank" rel="noreferrer">
+                    <a id="help-site-link" class="help-online-link" href="#" target="_blank" rel="noreferrer">
                         Full instructions and help online &rsaquo;</a>
                     <span class="help-text">Install steps, provider setup and troubleshooting,
                         in a page you can read on your phone while Sauce is busy.</span>
@@ -583,34 +588,36 @@
                 <h2>Getting Started</h2>
                 <p>Pick one of three ways to get commentary, on the <strong>AI Provider</strong> tab.</p>
                 <ol>
-                    <li><strong>Lunatic hosted &mdash; no API key.</strong> Paste the service URL, click
-                        Connect, and pick a model. A monthly allowance of free calls, nothing billed to
-                        you. The built-in voices all work; a <em>custom</em> prompt of your own does not,
-                        because the service supplies the instructions on the free tier.</li>
+                    <li><strong>Lunatic hosted &mdash; no API key.</strong> Choose it in the
+                        Provider dropdown and click <strong>Connect anonymously</strong>, or
+                        <strong>Sign in with Discord</strong> for a bigger allowance that survives a
+                        reinstall. A monthly allowance of free calls, nothing billed to you. Built-in
+                        voices all work; a prompt you wrote is not used there.</li>
                     <li><strong>Anthropic.</strong> Sign up at
                         <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>,
                         create a key, paste it, and choose a model. Usage is billed to your account.</li>
                     <li><strong>OpenAI-compatible.</strong> Works with OpenAI, Google Gemini, OpenRouter,
-                        Groq and a local Ollama. Choose the service, paste a key, and enter a model id.
-                        Model ids are free text because they change often &mdash; paste whatever your
-                        service currently offers.</li>
+                        Groq and a local Ollama. Choose the service, paste a key, and enter a model
+                        id.</li>
                 </ol>
-                <p>Then click <strong>Test Connection</strong> (or Connect), choose a voice on the
-                <strong>Prompts</strong> tab, and ride. There is one voice setting and it applies to
+                <p>Then click <strong>Test Connection</strong> &mdash; or
+                <strong>Connect anonymously</strong> on the hosted service &mdash; choose a voice on the
+                <strong>Voices</strong> tab, and ride. There is one voice setting and it applies to
                 whichever provider you are on. The commentary fires on what happens on the road, not
                 on a timer.</p>
 
-                <p>Four voices ship with the mod: <strong>Tour de France</strong>, the television booth;
-                <strong>Lunatic</strong>, the same race called by someone over-caffeinated;
-                <strong>Old Pro</strong>, a retired rider in the second chair; and
-                <strong>Tactical Coach</strong>, which is not commentary at all but a directeur on the
-                radio telling you what to do about it.</p>
+                <!-- Rendered from library.listBuiltins() by renderHelpVoices().
+                     It used to be a hand-written paragraph, which is how Help
+                     came to list two of four voices and describe a design that
+                     had been migrated away. -->
+                <p>The voices you can choose from:</p>
+                <dl id="help-voices" class="help-voices"></dl>
             </section>
 
             <section class="settings-section">
                 <h2>Writing your own</h2>
                 <p>The built-in voices are read-only, but you can keep as many of your own as you like
-                (up to twenty). On the <strong>Prompts</strong> tab:</p>
+                (up to twenty). On the <strong>Voices</strong> tab:</p>
                 <ul>
                     <li><strong>Duplicate &amp; edit</strong> copies the voice you are on, so you start
                         from something that already works rather than a blank page. It remembers where
@@ -623,51 +630,8 @@
                 follow. The <strong>user message template</strong> is the race data, and the
                 placeholders listed under it are filled in each time. Leave a placeholder out and the
                 mod appends that block anyway rather than dropping the data.</p>
-                <p>Improving a built-in voice never touches a copy you made — your words are yours.
-                One caveat: on the free hosted service your own prompt is <em>not</em> used, because
-                the service supplies the announcer's instructions there. Use your own API key to hear
-                what you wrote.</p>
-            </section>
-
-            <section class="settings-section">
-                <h2>Commentary Styles</h2>
-                <ul>
-                    <li><strong>Tour de France:</strong> A television race call. One punchy line as things
-                        happen on the road.</li>
-                    <li><strong>Tactical Coach:</strong> Direct advice on when to attack, who to watch, and
-                        how to respond.</li>
-                    <li><strong>Custom:</strong> Write your own system and user prompts. Not available on the
-                        hosted provider, which supplies its own voices.</li>
-                </ul>
-                <p>On the hosted provider the voice is chosen on the AI Provider tab instead, and the
-                selection here is ignored.</p>
-            </section>
-
-            <section class="settings-section">
-                <h2>Cost Information</h2>
-                <p>On the <strong>hosted</strong> provider you pay nothing &mdash; the readout shows free
-                calls remaining instead of a price.</p>
-                <p><strong>Anthropic</strong> pricing, per 1K tokens:</p>
-                <ul>
-                    <li><strong>Haiku 4.5:</strong> ~$0.001 input, ~$0.005 output</li>
-                    <li><strong>Sonnet 5:</strong> ~$0.002 input, ~$0.010 output</li>
-                    <li><strong>Opus 5:</strong> ~$0.005 input, ~$0.025 output</li>
-                </ul>
-                <p>A request sends about 1,000 tokens and gets back about 60. On Haiku that is roughly
-                $0.0013 a call, or $0.10&ndash;0.39 per hour of racing depending on how eventful it is.</p>
-                <p>For an <strong>OpenAI-compatible</strong> service the mod has no price list, so the cost
-                readout shows an asterisk until you enter the per-million rates on the AI Provider tab.</p>
-            </section>
-
-            <section class="settings-section">
-                <h2>Tips</h2>
-                <ul>
-                    <li>Use <strong>Haiku</strong> for best speed and lowest cost - it's perfect for live commentary.</li>
-                    <li>Reduce <strong>max tokens</strong> for shorter, punchier commentary.</li>
-                    <li>Select fewer <strong>data fields</strong> to focus commentary on what matters most to you.</li>
-                    <li>The <strong>pause button</strong> in the main window stops auto-updates but keeps history.</li>
-                    <li>Click <strong>copy</strong> to share particularly good commentary.</li>
-                </ul>
+                <p>Improving a built-in voice never touches a copy you made &mdash; your words are
+                yours.</p>
             </section>
         </div>
     </div>

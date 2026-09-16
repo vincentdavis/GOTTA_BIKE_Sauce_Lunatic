@@ -54,7 +54,8 @@ the prompt editor, the update notice with its diff open) and writes viewport +
 full-page PNGs to `build/shots/`. Needs a global Playwright; deliberately not in CI.
 Sauce opens the window at **700×600** — judge everything at that size. The base
 stylesheet is an approximation and `<ms>` icons are placeholder glyphs; the mod's own
-`announcer.css` is real.
+`announcer.css` is real. Set `CHROMIUM_PATH` if the machine's browser build does not match its
+Playwright version — the harness never downloads one.
 
 Both HTML files import the same module and call different entry points:
 `lunaticAnnouncerMain()` and `lunaticAnnouncerSettingsMain()`.
@@ -131,6 +132,19 @@ Both HTML files import the same module and call different entry points:
   Only the overlay subscribes to `nearby`, so it publishes the id to
   `ATHLETE_ID_KEY` and `authHeader()` reads it. `/v1/quota` echoes `bucket` so the
   client can refuse to overwrite the shared `QUOTA_KEY` from the wrong one.
+- **Nothing rider-facing states the voice list, or any other table, in prose.** The Help tab
+  renders `#help-voices` from `library.listBuiltins()`; the online page renders its list from
+  `listStyles()`. A hand-written copy is what left Help naming two of four voices and describing
+  the pre-library design a year after it was migrated away (F08).
+- There is **one** rider-facing word for the announcer persona: *voice*. The tab is **Voices**,
+  its heading is **Voice**, and the text-to-speech picker is **Speaking voice** — never plain
+  "Voice", or a rider picks Old Pro and wonders why Samantha still reads it.
+- `renderHelpLink()` points every element with class **`.help-online-link`** at
+  `serviceUrlFor(store) + '/help'`. Add a link to the online help anywhere and it follows a
+  rider's own deployment for free; do not hardcode the public URL.
+- Anthropic's rates live in **one** place the mod bills from: `anthropic.models` in
+  `providers.mjs`, per 1K. The settings window carries only the one-line summary beside the
+  Model select; the full per-1M table is on the service's help page and must stay in step.
 - Keys with a leading `/` are **global and shared across all mods** on the Sauce
   origin. That is why `ATHLETE_DATA_KEY` can read GOTTA.BIKE's imported data, and
   why our own counters must NOT reuse GOTTA's key strings.

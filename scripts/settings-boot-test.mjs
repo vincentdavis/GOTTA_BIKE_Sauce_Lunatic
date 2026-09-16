@@ -38,8 +38,13 @@ const tabBtns = ['settings-tab', 'api-tab', 'prompts-tab', 'data-tab', 'help-tab
 const tabPanels = tabBtns.map(b => { const p = makeEl('div'); p.id = b.dataset.tab; return p; });
 const activeTab = () => tabBtns.find(b => b._classes.has('active'))?.dataset.tab;
 
+// Two links to the online help now: the Help tab's, and the one under the
+// Anthropic Model select that replaced Help's per-1M price table (F09).
+const onlineLinks = [el('help-site-link'), makeEl('a')];
+
 installGlobals({ providerRows: Object.values(rows),
-                 selectors: { '.tab-btn': tabBtns, '.tab-panel': tabPanels } });
+                 selectors: { '.tab-btn': tabBtns, '.tab-panel': tabPanels,
+                              '.help-online-link': onlineLinks } });
 const { mod, common: { settingsStore } } = await loadAnnouncer();
 
 section('the settings window boots at all');
@@ -248,9 +253,32 @@ fire(del, 'click');
 check('two clicks delete', groups().length === 1, JSON.stringify(groups().map(g => g.label)));
 check('and fall back to a built-in', picker.value === 'tour', picker.value);
 
+// F08: Help carried a hand-written voice list that drifted to two of four,
+// and a whole section describing the design the prompt library replaced. The
+// list is rendered from library.listBuiltins() now, so it cannot drift from
+// the picker -- which is the property worth asserting.
+section('the Help tab lists the built-in voices from the library');
+{
+    const dl = el('help-voices');
+    const labels = dl.children.filter(c => c.tagName === 'DT').map(c => c.textContent);
+    const descs = dl.children.filter(c => c.tagName === 'DD').map(c => c.textContent);
+    check('one entry per built-in, same set as the picker',
+        labels.length === groups()[0].values.length, `${labels.length} vs ${groups()[0].values.length}`);
+    check('all four are named', labels.includes('Tour de France') && labels.includes('Lunatic') &&
+        labels.includes('Old Pro') && labels.includes('Tactical Coach'), labels.join(', '));
+    check('each has its description', descs.length === labels.length && descs.every(d => d.length > 10),
+        descs.join(' | '));
+    // It re-renders on every library change; a rebuild that appended would have
+    // doubled the list by now, since this test has made and deleted prompts.
+    check('re-rendering replaces the list rather than appending it',
+        dl.children.length === labels.length * 2, String(dl.children.length));
+}
+
 section('the Help tab links to the help page');
 {
     const link = el('help-site-link');
+    check('every link to the online help is pointed at it, not just the first',
+        onlineLinks[1].href === link.href, `${onlineLinks[1].href} vs ${link.href}`);
     check('it points at the public service by default',
         link.href === 'https://gottabikesaucelunatic-production.up.railway.app/help', link.href);
     // Someone running their own deployment must reach their own page: it is the
