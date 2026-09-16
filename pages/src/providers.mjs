@@ -33,6 +33,19 @@ export const DEFAULT_PROVIDER = 'anthropic';
 // settings window share one device token rather than minting two.
 export const DEVICE_TOKEN_KEY = '/gotta-bike-lunatic-device-token';
 export const QUOTA_KEY = '/gotta-bike-lunatic-quota';
+
+/**
+ * The Zwift athlete id the overlay last watched, written for the settings
+ * window to read.
+ *
+ * The service buckets an anonymous rider by athlete id when a request carries
+ * `X-Lunatic-Athlete`, and by device token when it does not. Only the overlay
+ * subscribes to `nearby`, so only the overlay knew the id -- and the settings
+ * window's /v1/quota call therefore asked about a DIFFERENT, untouched bucket
+ * than the one commentary spends from. Global (leading slash) so both windows
+ * see it.
+ */
+export const ATHLETE_ID_KEY = '/gotta-bike-lunatic-athlete-id';
 // Display only — who the bearer token belongs to, when it came from a sign-in
 // rather than the anonymous Connect button. The token itself lives in
 // DEVICE_TOKEN_KEY either way, so nothing in the request path branches on this.

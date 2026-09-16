@@ -125,6 +125,12 @@ Both HTML files import the same module and call different entry points:
   open; `startCommentary()` fires on the false→true edge of `isProviderConfigured()` in
   the overlay's store listener. Honour `commentaryPaused` there — a deliberate pause
   survives a provider swap.
+- **Every hosted request must carry the same identity.** The service buckets an
+  anonymous rider by athlete id when `X-Lunatic-Athlete` is present and by device
+  token when it is not, so a request that omits it asks about a *different* allowance.
+  Only the overlay subscribes to `nearby`, so it publishes the id to
+  `ATHLETE_ID_KEY` and `authHeader()` reads it. `/v1/quota` echoes `bucket` so the
+  client can refuse to overwrite the shared `QUOTA_KEY` from the wrong one.
 - Keys with a leading `/` are **global and shared across all mods** on the Sauce
   origin. That is why `ATHLETE_DATA_KEY` can read GOTTA.BIKE's imported data, and
   why our own counters must NOT reuse GOTTA's key strings.
@@ -155,6 +161,7 @@ Both HTML files import the same module and call different entry points:
 'promptUpdates'                      // per-window: 'auto' (default) | 'off'
 'promptUpdateNotice'                 // per-window: the undismissed "voices updated" line
 'settingsTab'                        // per-window: the tab the settings window last showed
+'/gotta-bike-lunatic-athlete-id'     // the overlay's watched athlete; the settings window's bucket
 '/gotta-bike-sauce-athlete-data'     // READ-ONLY, written by GOTTA.BIKE sauce
 'lunatic-announcer-settings-v1'      // per-window bag (data-settings-key)
 ```

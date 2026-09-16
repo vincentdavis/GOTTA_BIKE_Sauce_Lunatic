@@ -454,6 +454,16 @@ body:not(.transparent-bg) {
     font-size: 0.9em;
 }
 
+/* A test in flight: the button is Cancel, not a disabled Test Connection.
+   Muted so it does not read as the primary action while it is a way out. */
+.api-actions button.testing {
+    background: #4a5560;
+}
+
+.api-actions button.testing:hover {
+    background: #5a6773;
+}
+
 .api-actions button:hover {
     background: #1976d2;
 }

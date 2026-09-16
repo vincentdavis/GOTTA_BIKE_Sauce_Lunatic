@@ -147,6 +147,30 @@ try {
 } catch (err) { dataErr = err; }
 check('a real pack is survivable', !dataErr, dataErr ? `${dataErr.constructor.name}: ${dataErr.message}` : '');
 
+section('G01: the overlay publishes the athlete id the settings window needs');
+{
+    // The service buckets an anonymous rider by athlete id when a request
+    // carries X-Lunatic-Athlete. Only this window subscribes to `nearby`, so
+    // only this window knows the id — and the settings window's allowance
+    // readout described a different, untouched bucket until it did.
+    check('the watched id is published', settingsStore.get('/gotta-bike-lunatic-athlete-id') === 2,
+        String(settingsStore.get('/gotta-bike-lunatic-athlete-id')));
+
+    // ~1Hz: every set() wakes both windows' listeners, so an unchanged id
+    // must not write.
+    let writes = 0;
+    settingsStore.addEventListener('set', ev => {
+        if (ev.data.key === '/gotta-bike-lunatic-athlete-id') writes++;
+    });
+    for (let i = 0; i < 5; i++) nearby(pack);
+    check('an unchanged id does not rewrite it', writes === 0, `${writes} write(s)`);
+
+    // An empty tick means "nobody to talk about", not "this rider is gone".
+    // The settings window may be opened long after the ride.
+    nearby([]);
+    check('an empty tick does not clear it', settingsStore.get('/gotta-bike-lunatic-athlete-id') === 2);
+}
+
 const watchChange = subscribed.get('watching-athlete-change');
 check('a camera cut is handled', typeof watchChange === 'function');
 try { watchChange?.(); } catch (err) { check('camera cut threw', false, String(err)); }

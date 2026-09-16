@@ -416,6 +416,12 @@ const server = createServer(async (req, res) => {
             return json(res, 200, {
                 ...q,
                 tier: ident.tier,
+                // Echoed so a client can tell WHICH allowance this is. An
+                // anonymous rider is bucketed by athlete id when the request
+                // carries X-Lunatic-Athlete and by device token when it does
+                // not; a settings window that asked without the header would
+                // otherwise report a pristine bucket as the rider's own.
+                bucket: ident.bucket,
                 account: ident.kind === 'account' ? { name: ident.label } : null
             });
         }

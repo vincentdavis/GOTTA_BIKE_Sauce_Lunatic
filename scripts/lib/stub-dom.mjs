@@ -81,7 +81,11 @@ export function makeEl(tag = 'div', data = {}) {
         closest: () => el,
         querySelector: () => makeEl(),
         querySelectorAll: () => [],
-        focus() {}, blur() {}, click() {}, scrollIntoView() {},
+        // Real focus tracking: a handler that restores focus after an async
+        // action is asserting something a test should be able to see.
+        focus() { if (globalThis.document) globalThis.document.activeElement = el; },
+        blur() { if (globalThis.document?.activeElement === el) globalThis.document.activeElement = globalThis.document.body; },
+        click() {}, scrollIntoView() {},
         insertAdjacentHTML() {},
         getBoundingClientRect: () => ({ top: 0, left: 0, width: 0, height: 0 }),
         classList: {
@@ -148,6 +152,8 @@ export const el = id => {
 export function installGlobals({ providerRows = [], selectors = {} } = {}) {
     globalThis.document = {
         readyState: 'complete',
+        // Whatever last had focus() called on it, as a browser would report.
+        activeElement: null,
         body: makeEl('body'),
         documentElement: makeEl('html'),
         getElementById: el,
@@ -157,6 +163,7 @@ export function installGlobals({ providerRows = [], selectors = {} } = {}) {
         createTextNode: t => ({ textContent: t }),
         addEventListener: () => {}
     };
+    globalThis.document.activeElement = globalThis.document.body;
     globalThis.window = { open: () => {}, addEventListener: () => {}, location: { href: '' } };
     Object.defineProperty(globalThis, 'navigator', {
         value: { clipboard: { writeText: async () => {} } }, configurable: true

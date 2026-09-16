@@ -110,6 +110,64 @@ check('a failing test turns the box red', el('api-info').className === 'api-info
 check('and says so', /Test failed/.test(el('api-status-text').textContent), el('api-status-text').textContent);
 globalThis.fetch = async () => { throw new Error('no network in this test'); };
 
+section('G06: a test that hangs is bounded, cancellable and legible');
+{
+    // A host that accepts the connection and then says nothing: fetch never
+    // settles. This used to leave the button disabled and "Testing..." up
+    // until Chromium's own connect timeout, minutes later.
+    // Start from a KNOWN-GOOD box, so "cancel did not mark it failed" is
+    // distinguishable from "it was already failed".
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({}), headers: { get: () => null } });
+    fire(el('test-api-btn'), 'click');
+    await settle();
+    check('(setup) the box is green before the hang', el('api-info').className === 'api-info connected',
+        el('api-info').className);
+
+    let seenSignal = null;
+    globalThis.fetch = (url, opts) => new Promise((_, reject) => {
+        seenSignal = opts.signal;
+        opts.signal.addEventListener('abort', () =>
+            reject(opts.signal.reason || new DOMException('aborted', 'AbortError')));
+    });
+    const btn = el('test-api-btn');
+    fire(btn, 'click');
+    await settle();
+    check('the request carries an abort signal', !!seenSignal);
+    check('the button offers a way out, not a disabled control',
+        btn.textContent === 'Cancel' && !btn.disabled, `${btn.textContent} disabled=${btn.disabled}`);
+    check('and says it is testing', el('api-test-status').className === 'loading');
+
+    // Clicking again cancels rather than starting a second test.
+    fire(btn, 'click');
+    await settle();
+    check('cancelling ends the test', btn.textContent === 'Test Connection', btn.textContent);
+    check('and says so', el('api-test-status').textContent === 'Test cancelled.',
+        el('api-test-status').textContent);
+    // A cancelled test says nothing about the settings, so the Status box must
+    // not go red.
+    check('a cancelled test leaves the earlier verdict alone',
+        el('api-info').className === 'api-info connected', el('api-info').className);
+    check('focus returns to the button', document.activeElement === btn);
+
+    // The timeout path, and the copy a rider acts on.
+    globalThis.fetch = async () => { throw new DOMException('timed out', 'TimeoutError'); };
+    fire(btn, 'click');
+    await settle();
+    check('a timeout names the host and the bound',
+        /No reply from api\.anthropic\.com after 15 seconds/.test(el('api-test-status').textContent),
+        el('api-test-status').textContent);
+    check('and it does mark the settings failed', el('api-info').className === 'api-info failed');
+
+    // The bare "Failed to fetch" every network problem produces.
+    globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
+    fire(btn, 'click');
+    await settle();
+    check('an unreachable host is named too',
+        /Could not reach api\.anthropic\.com/.test(el('api-test-status').textContent),
+        el('api-test-status').textContent);
+    globalThis.fetch = async () => { throw new Error('no network in this test'); };
+}
+
 settingsStore.set('claudeApiKey', '');
 check('clearing the key returns to Not configured',
     /Not configured/.test(el('api-status-text').textContent), el('api-status-text').textContent);
@@ -323,6 +381,55 @@ section('the voice picker resolves without waiting out its timeout');
 const ttsSel = el('tts-voice');
 check('voices are listed', ttsSel.children.length === 2, `${ttsSel.children.length} option(s)`);
 check('one is selected', !!ttsSel.value, ttsSel.value);
+
+section('G01: the settings window asks about the bucket commentary spends from');
+{
+    // Only the overlay subscribes to `nearby`, so it publishes the watched
+    // athlete id to a global key. Without it this request is bucketed by
+    // device token while commentary is bucketed by athlete — a pristine
+    // allowance reported beside an overlay that is out of calls.
+    settingsStore.set('/gotta-bike-lunatic-athlete-id', 123456);
+    settingsStore.set('/gotta-bike-lunatic-device-token', 'lun_mock');
+    // serviceUrl() reads the input, not the store — as it must, so a rider can
+    // type a URL and press Connect in one go.
+    el('hosted-base-url').value = 'https://service.example';
+    settingsStore.set('aiProvider', 'hosted');
+
+    const seen = [];
+    globalThis.fetch = async (url, opts = {}) => {
+        seen.push({ url: String(url), headers: opts.headers || {} });
+        const body = String(url).endsWith('/v1/models')
+            ? { data: [{ id: 'free-fast', label: 'Fast' }] }
+            : { remaining: 3, limit: 150, bucket: 'z:123456' };
+        return { ok: true, status: 200, json: async () => body, headers: { get: () => null } };
+    };
+    fire(el('hosted-connect-btn'), 'click');
+    await settle();
+
+    const quotaReq = seen.find(r => r.url.includes('/v1/quota'));
+    check('the quota request was made', !!quotaReq, seen.map(r => r.url).join(', '));
+    check('and carries the athlete id', quotaReq?.headers['X-Lunatic-Athlete'] === '123456',
+        JSON.stringify(quotaReq?.headers));
+    check('the allowance is stored for the overlay', settingsStore.get('/gotta-bike-lunatic-quota') === 3,
+        String(settingsStore.get('/gotta-bike-lunatic-quota')));
+
+    // Belt and braces: an answer about the wrong bucket must not overwrite the
+    // shared reading the overlay renders from.
+    globalThis.fetch = async (url) => ({
+        ok: true, status: 200, headers: { get: () => null },
+        json: async () => String(url).endsWith('/v1/models')
+            ? { data: [{ id: 'free-fast', label: 'Fast' }] }
+            : { remaining: 150, limit: 150, bucket: 'd:someDevice' }
+    });
+    fire(el('hosted-connect-btn'), 'click');
+    await settle();
+    check('a device-bucket answer does not overwrite it',
+        settingsStore.get('/gotta-bike-lunatic-quota') === 3,
+        String(settingsStore.get('/gotta-bike-lunatic-quota')));
+    check('and it is labelled as this install, not this month',
+        /left for this install/.test(el('hosted-quota').textContent), el('hosted-quota').textContent);
+    globalThis.fetch = async () => { throw new Error('no network in this test'); };
+}
 
 section('sign-out');
 const fired = fire(el('hosted-signout-btn'), 'click');

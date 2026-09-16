@@ -3,6 +3,7 @@ import * as common from '/pages/src/common.mjs';
 // though the mod's own file sits at the same relative path on disk.
 import {
     PROVIDERS, DEFAULT_PROVIDER, COMPATIBLE_PRESETS, DEVICE_TOKEN_KEY, QUOTA_KEY, ACCOUNT_KEY,
+    ATHLETE_ID_KEY,
     providerFor, presetFor, costFor, streamCompletion, tokenKind
 } from './providers.mjs';
 import {
@@ -300,6 +301,7 @@ export async function lunaticAnnouncerMain() {
         }
         nearbyData = data;
         watchingAthlete = data.find(a => a.watching);
+        publishAthleteId(watchingAthlete?.athleteId);
 
         const now = Date.now();
         refreshRaceContextNames();
@@ -634,6 +636,25 @@ function updatePauseButton() {
         statusEl.classList.toggle('manual', !isPaused && manual);
         statusEl.classList.toggle('active', !isPaused && !manual);
     }
+}
+
+/**
+ * Publish the watched athlete id for the settings window.
+ *
+ * Only the overlay subscribes to `nearby`, but the settings window needs the
+ * same id to ask /v1/quota about the bucket commentary actually spends from.
+ * Written only when it changes: this runs at ~1Hz and every set() wakes both
+ * windows' `changed` listeners.
+ *
+ * Never cleared. A camera cut or an empty tick means "nobody to talk about",
+ * not "this rider stopped existing", and the settings window may be opened
+ * long after the ride ended -- with no id it would silently go back to asking
+ * about the wrong bucket.
+ */
+function publishAthleteId(id) {
+    if (!id) return;
+    if (common.settingsStore.get(ATHLETE_ID_KEY) === id) return;
+    common.settingsStore.set(ATHLETE_ID_KEY, id);
 }
 
 function updateApiStatus() {
@@ -1758,13 +1779,37 @@ function setupApiKeyToggle() {
     setupKeyField('toggle-compat-key-visibility', 'compat-api-key', 'compatApiKey');
 }
 
+/**
+ * The same bound the streaming shell puts on time-to-first-token
+ * (providers.mjs, `bump(15000)`). A test with no bound at all was the one
+ * request in the mod that could hang indefinitely -- and it is the control
+ * whose entire job is diagnosis.
+ */
+const TEST_TIMEOUT_MS = 15000;
+
 async function setupTestConnection() {
     const testBtn = document.getElementById('test-api-btn');
     const statusEl = document.getElementById('api-test-status');
 
     if (!testBtn) return;
 
+    // Non-null while a test is in flight. The button becomes Cancel rather
+    // than going disabled: against a host that never answers, a disabled
+    // button means a rider who spots their typo cannot re-test without
+    // closing the window.
+    let inFlight = null;
+
+    const setIdle = () => {
+        inFlight = null;
+        testBtn.textContent = 'Test Connection';
+        testBtn.classList.remove('testing');
+    };
+
     testBtn.addEventListener('click', async () => {
+        if (inFlight) {
+            inFlight.abort();
+            return;                      // the handler below reports the outcome
+        }
         if (!isProviderConfigured()) {
             // Say what to do, not what is missing in the abstract.
             statusEl.textContent = {
@@ -1777,10 +1822,18 @@ async function setupTestConnection() {
         }
 
         const prov = activeProvider();
-        testBtn.disabled = true;
-        statusEl.textContent = 'Testing...';
+        const ctrl = new AbortController();
+        inFlight = ctrl;
+        // A host that accepts the connection and then says nothing is the case
+        // the browser's own timeout takes minutes to fail.
+        const timer = setTimeout(() => ctrl.abort(new DOMException('timed out', 'TimeoutError')),
+            TEST_TIMEOUT_MS);
+        testBtn.textContent = 'Cancel';
+        testBtn.classList.add('testing');
+        statusEl.textContent = 'Testing…';
         statusEl.className = 'loading';
 
+        let reqUrl = '';
         try {
             // Built through the adapter, not hand-rolled: a second copy of the
             // request shape drifts, and then the test passes for a model the
@@ -1795,12 +1848,14 @@ async function setupTestConnection() {
                 maxTokens: 16
             });
 
+            reqUrl = req.url;
             const response = await fetch(req.url, {
                 method: 'POST',
                 headers: req.headers,
                 // Non-streaming for the test: we only care that the request is
                 // accepted, and a stream would need the whole reader loop.
-                body: JSON.stringify({ ...req.body, stream: false, stream_options: undefined })
+                body: JSON.stringify({ ...req.body, stream: false, stream_options: undefined }),
+                signal: ctrl.signal
             });
 
             if (response.ok) {
@@ -1815,13 +1870,42 @@ async function setupTestConnection() {
                 markApiTestFailed();
             }
         } catch (err) {
-            statusEl.textContent = `Error: ${err.message}`;
+            statusEl.textContent = describeTestFailure(err, reqUrl);
             statusEl.className = 'error';
-            markApiTestFailed();
+            // A test the rider cancelled says nothing about the settings, so
+            // it must not paint the Status box red.
+            if (err?.name !== 'AbortError') markApiTestFailed();
         } finally {
-            testBtn.disabled = false;
+            clearTimeout(timer);
+            setIdle();
+            // The rider clicked this button; leave the focus where they put it
+            // rather than dropping it on <body>.
+            testBtn.focus();
         }
     });
+}
+
+/**
+ * Turn a failed test into something a rider can act on.
+ *
+ * `fetch` rejects with a bare "Failed to fetch" for every network-layer
+ * problem there is -- wrong port, host asleep, VPN swallowing it, CORS -- so
+ * the host is the one piece of information worth adding.
+ */
+function describeTestFailure(err, url) {
+    let host = '';
+    try { host = new URL(url).host; } catch { /* the URL never got built */ }
+    const where = host || 'the service';
+
+    if (err?.name === 'TimeoutError') {
+        return `No reply from ${where} after ${TEST_TIMEOUT_MS / 1000} seconds — check the URL. ` +
+            'Running a local server? Make sure it is started.';
+    }
+    if (err?.name === 'AbortError') return 'Test cancelled.';
+    if (err instanceof TypeError) {
+        return `Could not reach ${where} — check the URL and your connection.`;
+    }
+    return `Error: ${err?.message || 'unknown error'}`;
 }
 
 /**
@@ -2094,9 +2178,22 @@ function setupHostedControls() {
         return body;
     }
 
-    const authHeader = () => ({
-        Authorization: `Bearer ${common.settingsStore.get(DEVICE_TOKEN_KEY) || ''}`
-    });
+    /**
+     * The same identity a commentary call sends.
+     *
+     * Without `X-Lunatic-Athlete` the service buckets this request by device
+     * token while the overlay's calls are bucketed by athlete id, so the
+     * allowance shown here described a bucket nothing had ever spent from --
+     * "150 of 150 left" beside an overlay saying the monthly limit was reached.
+     */
+    const authHeader = () => {
+        const headers = {
+            Authorization: `Bearer ${common.settingsStore.get(DEVICE_TOKEN_KEY) || ''}`
+        };
+        const athleteId = common.settingsStore.get(ATHLETE_ID_KEY);
+        if (athleteId) headers['X-Lunatic-Athlete'] = String(athleteId);
+        return headers;
+    };
 
     /** Pull the model list, the voices, and the remaining allowance. */
     async function refresh() {
@@ -2108,9 +2205,20 @@ function setupHostedControls() {
         })), 'hostedModel', 'free-fast');
 
         const quota = await getJson('/v1/quota', { headers: authHeader() });
-        common.settingsStore.set(QUOTA_KEY, quota.remaining);
+        // QUOTA_KEY is shared with the overlay, which renders its own readout
+        // from it. Only write a number that describes the bucket commentary
+        // spends from: if we know an athlete id but the service answered about
+        // a device bucket (an older deployment that does not echo `bucket`, or
+        // a header a proxy stripped), showing it here is one thing -- leaving
+        // it in the overlay's tooltip is another.
+        const athleteId = common.settingsStore.get(ATHLETE_ID_KEY);
+        const wrongBucket = athleteId && typeof quota.bucket === 'string' &&
+            quota.bucket.startsWith('d:');
+        if (!wrongBucket) common.settingsStore.set(QUOTA_KEY, quota.remaining);
         if (quotaEl) {
-            quotaEl.textContent = `${quota.remaining} of ${quota.limit} free calls left this month`;
+            quotaEl.textContent = wrongBucket
+                ? `${quota.remaining} of ${quota.limit} free calls left for this install`
+                : `${quota.remaining} of ${quota.limit} free calls left this month`;
         }
         // The service is the authority on who the key belongs to; the stored
         // label is only a fallback for an offline settings window.
