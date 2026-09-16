@@ -132,6 +132,14 @@ Both HTML files import the same module and call different entry points:
   Only the overlay subscribes to `nearby`, so it publishes the id to
   `ATHLETE_ID_KEY` and `authHeader()` reads it. `/v1/quota` echoes `bucket` so the
   client can refuse to overwrite the shared `QUOTA_KEY` from the wrong one.
+- **There are two independent triggers, and "manual" means both are off.** `eventDriven` fires
+  from the 1Hz `nearby` tick via `shouldFireNow()`; `updateInterval` is a clock that is a
+  longest-silence floor when events are on and a plain timer when they are not. Read it only
+  through `clockSeconds()`, and test manual with `isManualOnly()` — never `updateInterval === 0`,
+  which is what let the overlay print "Manual only" over eight paid calls a minute.
+- **`store.get(k) || fallback` swallows a meaningful `0`.** `parseInt(get('updateInterval') || 60, 10)`
+  read a stored 0 as 60 and started a minute timer under the one setting that exists to stop
+  unasked-for calls. Use `?? fallback` when 0 is a real value, and put the `|| 0` after the parse.
 - **Nothing rider-facing states the voice list, or any other table, in prose.** The Help tab
   renders `#help-voices` from `library.listBuiltins()`; the online page renders its list from
   `listStyles()`. A hand-written copy is what left Help naming two of four voices and describing

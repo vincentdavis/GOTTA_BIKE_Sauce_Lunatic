@@ -75,6 +75,61 @@ settingsStore.set('commentaryPaused', false);
 check('and drops not-configured', !api._classes.has('not-configured'));
 check('the tooltip names the provider', /ready/.test(api.title), api.title);
 
+section('F10: the cadence dot describes both triggers, and manual means manual');
+{
+    // The section above left it paused on purpose; come back through the same
+    // edge the overlay uses, since isPaused is module state and the store key
+    // alone does not move it.
+    settingsStore.set('claudeApiKey', '');
+    settingsStore.set('claudeApiKey', 'sk-ant-api03-cadence-key');
+
+    // Timers are how the lie was load-bearing: restartAutoUpdate() read a
+    // stored 0 as 60, because its `|| 60` fell back on the VALUE rather than on
+    // a failed parse. So "Manual only" started a minute timer. Record what gets
+    // scheduled.
+    const realSetInterval = globalThis.setInterval;
+    let scheduled = [];
+    globalThis.setInterval = (fn, ms) => { scheduled.push(ms); return realSetInterval(fn, ms); };
+
+    // Reset between the two writes, so `scheduled` holds what the SETTLED
+    // combination schedules and not what the half-applied one did.
+    const set = (events, clock) => {
+        settingsStore.set('eventDriven', events);
+        scheduled = [];
+        settingsStore.set('updateInterval', clock);
+    };
+
+    set(true, 0);
+    check('events with no clock is NOT manual — it still fires, and it is paid',
+        auto._classes.has('active') && !auto._classes.has('manual'),
+        `${[...auto._classes].join(' ')} — ${auto.title}`);
+    check('and the tooltip says what it is doing',
+        auto.title === 'Listening for race events', auto.title);
+
+    set(false, 60);
+    check('clock only: the tooltip names the interval',
+        auto.title === 'Speaking every minute', auto.title);
+    check('and a timer really is scheduled', scheduled.includes(60000), scheduled.join(', '));
+
+    set(false, 0);
+    check('both off is the only manual state', auto._classes.has('manual'),
+        [...auto._classes].join(' '));
+    check('the tooltip points at the refresh button',
+        /Manual only/.test(auto.title), auto.title);
+    check('and NOTHING is scheduled — this is the 60s timer the `|| 60` used to start',
+        !scheduled.length, scheduled.join(', '));
+
+    set(true, 45);
+    check('back to the shipped default: active, and the tooltip says both',
+        auto._classes.has('active') && /race events/.test(auto.title) &&
+        /at least every 45 seconds/.test(auto.title),
+        `${[...auto._classes].join(' ')} — ${auto.title}`);
+    check('still no wall-clock timer — the 1Hz data tick schedules it',
+        !scheduled.length, scheduled.join(', '));
+
+    globalThis.setInterval = realSetInterval;
+}
+
 section('the cost readout is a $ with the figure in the tooltip');
 const cost = el('session-cost');
 check('the overlay shows a bare $', cost.textContent === '$', JSON.stringify(cost.textContent));
@@ -169,6 +224,37 @@ section('G01: the overlay publishes the athlete id the settings window needs');
     // The settings window may be opened long after the ride.
     nearby([]);
     check('an empty tick does not clear it', settingsStore.get('/gotta-bike-lunatic-athlete-id') === 2);
+}
+
+section('F10: "manual only" also means no unasked-for first line');
+{
+    // The first-data fire ignored the cadence settings entirely: one line
+    // arrived the moment ride data did, every ride, however the rider had set
+    // things. generateCommentary() marks the container 'streaming' before its
+    // first await, so a tick either called it or did not.
+    const container = el('current-commentary');
+    const fired = () => container._classes.has('streaming');
+
+    settingsStore.set('claudeApiKey', 'sk-ant-api03-first-data-key');
+    settingsStore.set('eventDriven', false);
+    settingsStore.set('updateInterval', 0);
+
+    nearby([]);                             // an empty tick rearms the first fire
+    container._classes.delete('streaming');
+    nearby(pack);
+    check('manual only: the first tick of ride data says nothing', !fired(),
+        [...container._classes].join(' '));
+
+    // Not vacuous: the same tick under the shipped defaults does fire.
+    settingsStore.set('eventDriven', true);
+    settingsStore.set('updateInterval', 45);
+    nearby([]);
+    container._classes.delete('streaming');
+    nearby(pack);
+    check('and with the defaults it does speak', fired(), [...container._classes].join(' '));
+    // The stub has no network, so this logs one expected "[Lunatic] provider
+    // error" as the call unwinds. That log line IS the evidence it fired.
+    await new Promise(r => setImmediate(r));
 }
 
 const watchChange = subscribed.get('watching-athlete-change');

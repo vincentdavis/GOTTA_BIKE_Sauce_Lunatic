@@ -309,8 +309,10 @@ export async function lunaticAnnouncerMain() {
         detectEvents(data, now);
 
         // Fire one commentary as soon as real ride data first arrives instead
-        // of waiting a full update interval.
-        if (!firstDataFired && !isPaused && !isStreaming &&
+        // of waiting a full update interval. Not when the rider has turned off
+        // both triggers: "manual only" has to mean it, or the one setting that
+        // exists to stop unasked-for calls still makes one every ride.
+        if (!firstDataFired && !isPaused && !isStreaming && !isManualOnly() &&
             isProviderConfigured() &&
             nearbyData.some(r => !r.watching)) {
             firstDataFired = true;
@@ -370,8 +372,9 @@ export async function lunaticAnnouncerMain() {
             // calls left" while burning the rider's own key.
             renderCost();
         }
-        if (changed.has('updateInterval')) {
+        if (changed.has('updateInterval') || changed.has('eventDriven')) {
             restartAutoUpdate();
+            updatePauseButton();    // the dot describes both triggers
         }
         if (changed.has('ttsVoice')) {
             ttsVoice = pickVoice();
@@ -511,7 +514,7 @@ function refreshRaceContextNames() {
  */
 function clearStuckStream() {
     if (!isStreaming) return;
-    const interval = (parseInt(common.settingsStore.get('updateInterval') ?? 45, 10) || 0) * 1000;
+    const interval = clockSeconds() * 1000;
     if (Date.now() - streamStartedAt > Math.max(30000, interval)) {
         console.warn('[Lunatic] stream watchdog fired — aborting stuck request');
         try { activeAbort?.abort(); } catch (e) { /* ignore */ }
@@ -613,6 +616,33 @@ function updateMuteButton() {
     btn.title = on ? 'Mute spoken commentary' : 'Speak commentary aloud';
 }
 
+/** The longest-silence setting in seconds; 0 means "never on a clock". */
+function clockSeconds() {
+    return parseInt(common.settingsStore.get('updateInterval') ?? 45, 10) || 0;
+}
+
+/**
+ * Is nothing going to speak unless the rider presses refresh?
+ *
+ * BOTH triggers have to be off. The overlay used to call it manual whenever
+ * the clock was off, which was a lie with the shipped defaults: race events
+ * still fired, up to eight paid calls a minute, under a dot whose tooltip said
+ * "Manual only — use the refresh button". Picking that option is exactly what a
+ * rider does to stop spending.
+ */
+function isManualOnly() {
+    return !common.settingsStore.get('eventDriven') && clockSeconds() === 0;
+}
+
+/** "45 seconds", "2 minutes" — reads after "every", so 60 is "minute". */
+function describeClock(secs) {
+    if (secs % 60 === 0) {
+        const mins = secs / 60;
+        return mins === 1 ? 'minute' : `${mins} minutes`;
+    }
+    return `${secs} seconds`;
+}
+
 function updatePauseButton() {
     const pauseBtn = document.getElementById('pause-btn');
     const statusEl = document.getElementById('auto-update-status');
@@ -625,13 +655,20 @@ function updatePauseButton() {
         if (icon) {
             icon.textContent = isPaused ? 'play_arrow' : 'pause';
         }
-        pauseBtn.title = isPaused ? 'Resume auto-updates' : 'Pause auto-updates';
+        // Not "auto-updates": in this mod an update is also the daily voice
+        // check and the next zip off the releases page.
+        pauseBtn.title = isPaused ? 'Resume the announcer' : 'Pause the announcer';
     }
 
     if (statusEl) {
-        const manual = parseInt(common.settingsStore.get('updateInterval') ?? 60, 10) === 0;
+        const manual = isManualOnly();
+        const clock = clockSeconds();
         statusEl.title = isPaused ? 'Commentary paused'
-            : (manual ? 'Manual only — use the refresh button' : 'Listening for race events');
+            : manual ? 'Manual only — use the refresh button'
+            : common.settingsStore.get('eventDriven')
+                ? (clock ? `Listening for race events, and speaking at least every ${describeClock(clock)}`
+                    : 'Listening for race events')
+                : `Speaking every ${describeClock(clock)}`;
         statusEl.classList.toggle('paused', isPaused);
         statusEl.classList.toggle('manual', !isPaused && manual);
         statusEl.classList.toggle('active', !isPaused && !manual);
@@ -692,7 +729,7 @@ function restartAutoUpdate() {
     // would double-fire and bypass the rate limit.
     if (common.settingsStore.get('eventDriven')) return;
 
-    const interval = parseInt(common.settingsStore.get('updateInterval') || 60, 10);
+    const interval = clockSeconds();
     if (interval > 0 && !isPaused) {
         updateTimer = setInterval(() => {
             if (!isStreaming && !isPaused && !isSpeaking()) {
@@ -1305,7 +1342,7 @@ function shouldFireNow(now) {
     if (best >= 6 && sinceLast > 25000) return true;
 
     // Longest-silence floor (the existing updateInterval setting).
-    const maxSilence = (parseInt(common.settingsStore.get('updateInterval') ?? 45, 10) || 0) * 1000;
+    const maxSilence = clockSeconds() * 1000;
     return maxSilence > 0 && sinceLast > maxSilence;
 }
 
