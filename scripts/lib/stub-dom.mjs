@@ -149,7 +149,7 @@ export const el = id => {
  * @param {Object<string, object[]>} selectors extra `querySelectorAll` answers,
  *   e.g. { '.tab-btn': [...], '.tab-panel': [...] } so tab logic can be driven.
  */
-export function installGlobals({ providerRows = [], selectors = {} } = {}) {
+export function installGlobals({ providerRows = [], selectors = {}, voices = null } = {}) {
     globalThis.document = {
         readyState: 'complete',
         // Whatever last had focus() called on it, as a browser would report.
@@ -168,16 +168,43 @@ export function installGlobals({ providerRows = [], selectors = {} } = {}) {
     Object.defineProperty(globalThis, 'navigator', {
         value: { clipboard: { writeText: async () => {} } }, configurable: true
     });
-    // Two voices, not none. populateVoicePicker() waits up to 3s for
+// Two voices, not none. populateVoicePicker() waits up to 3s for
     // `voiceschanged` when getVoices() comes back empty -- correct in a browser,
     // where the list arrives late, but with an empty stub every boot paid the
     // full 3 seconds. It also means the picker and pickVoice() actually run.
+    //
+    // Pass `voices` to model another machine: [] is the one that matters (a
+    // non-English Windows, where the /^en/ filter can empty the list), and the
+    // Microsoft names are what Windows actually offers.
     const voice = (name, lang, def = false) => ({ name, lang, default: def, localService: true });
+    const voiceList = voices || [voice('Daniel', 'en-GB', true), voice('Samantha', 'en-US')];
+    // spoken[] is what the mod asked to say, so a test can assert the words and
+    // not merely that nothing threw. speak() runs the utterance's own lifecycle
+    // handlers, which is the only way "Speaking..." and its clear-down are
+    // observable outside a browser.
     globalThis.speechSynthesis = {
-        getVoices: () => [voice('Daniel', 'en-GB', true), voice('Samantha', 'en-US')],
-        cancel: () => {}, speak: () => {}, addEventListener: () => {}
+        speaking: false,
+        pending: false,
+        spoken: [],
+        getVoices: () => voiceList,
+        cancel() { this.speaking = false; },
+        speak(u) {
+            this.spoken.push(u);
+            this.speaking = true;
+            queueMicrotask(() => {
+                u.onstart?.();
+                this.speaking = false;
+                u.onend?.();
+            });
+        },
+        addEventListener: () => {}
     };
-    globalThis.SpeechSynthesisUtterance = class { constructor(t) { this.text = t; } };
+    globalThis.SpeechSynthesisUtterance = class {
+        constructor(t) {
+            this.text = t;
+            this.onstart = null; this.onend = null; this.onerror = null;
+        }
+    };
     // Empty, but present: migrateLegacySettings() scans raw localStorage, and
     // without this it takes its catch branch and is never exercised at all.
     globalThis.localStorage = { length: 0, key: () => null, getItem: () => null, setItem: () => {} };

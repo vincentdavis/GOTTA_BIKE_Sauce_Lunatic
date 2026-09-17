@@ -17,8 +17,9 @@ a one-line race call. Lines fire when something happens, not on a timer.
 
 - **Event-driven commentary.** Attacks, splits, catches and riders going backwards
   trigger a call. A fixed clock does not.
-- **Spoken aloud.** Sentences are spoken as they stream in, so audio starts at the
-  first sentence. Uses your Mac's built-in voices — no extra API, no round trip.
+- **Spoken aloud, on by default.** Sentences are spoken as they stream in, so audio
+  starts at the first sentence. Uses the voices built into your computer, on macOS
+  and Windows alike — no extra API, no round trip.
 - **Race aware.** Distance to go, your placing, gradient, route and event name.
 - **Storyline memory.** An attack is remembered, so the catch two minutes later
   gets a callback.
@@ -53,7 +54,8 @@ rate of riders around you are sent to whichever service you choose.
    `SauceMods/GOTTA_BIKE_Sauce_Lunatic/manifest.json`.
 3. Restart Sauce4Zwift, enable the mod, open the **Lunatic Announcer** window.
 4. Open its settings (gear icon) → **AI Provider** tab → pick a provider.
-5. Click the speaker button in the titlebar to unmute. Audio is off by default.
+5. It speaks aloud from the first line. The speaker button in the titlebar mutes it,
+   and **Speak commentary aloud** on the Settings tab is the same switch.
 
 ## Controls
 

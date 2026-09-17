@@ -166,5 +166,6 @@ jobs:
             Whichever you choose, rider data leaves your machine: the names,
             power and heart rate of riders around you are sent to that service.
 
-            Spoken commentary is **off by default** - enable it with the
-            speaker button in the window titlebar.
+            Spoken commentary is **on by default**, using the voices built
+            into your computer (macOS and Windows alike). The speaker button
+            in the window titlebar mutes it.

@@ -166,8 +166,11 @@ common.settingsStore.setDefault({
     // Live cadence (event-driven)
     eventDriven: true,
     minInterval: 12,
-    // Text-to-speech
-    ttsEnabled: false,
+    // Text-to-speech. ON: the mod's one-line description is "spoken aloud", and
+    // a rider who never finds the switch never hears the thing they installed.
+    // The speaker button in the overlay titlebar mutes it in one click, and the
+    // Status box says so the moment a provider connects.
+    ttsEnabled: true,
     ttsVoice: '',
     ttsRate: 1.2,
     ttsPitch: 1.1,
@@ -1396,19 +1399,42 @@ function shouldFireNow(now) {
 const NOVELTY_VOICES = new Set(['Bad News', 'Bahh', 'Bells', 'Boing', 'Bubbles', 'Cellos',
     'Good News', 'Jester', 'Organ', 'Superstar', 'Trinoids', 'Whisper', 'Wobble', 'Zarvox', 'Albert']);
 
+/**
+ * The voices worth offering, English first.
+ *
+ * English only was a silent kill switch on any machine whose OS language is not
+ * English: the filter emptied the list, pickVoice() returned null and speech
+ * simply never happened, with nothing on screen to say why. English is still
+ * preferred -- the prompts write numbers out as English words -- but when there
+ * is none, offer what the machine has rather than nothing.
+ */
 function listVoices() {
     if (typeof speechSynthesis === 'undefined') return [];
-    return speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang) && !NOVELTY_VOICES.has(v.name));
+    const all = speechSynthesis.getVoices().filter(v => !NOVELTY_VOICES.has(v.name));
+    const english = all.filter(v => /^en/i.test(v.lang));
+    return english.length ? english : all;
 }
+
+/**
+ * Apple's names first because they are the best of the built-ins, then
+ * Microsoft's so a Windows machine lands somewhere deliberate rather than on
+ * whatever getVoices() happens to return first. Unverified on Windows: nothing
+ * in this repo has run there, so every name below is a preference that falls
+ * through harmlessly when absent.
+ */
+const PREFERRED_VOICES = ['Daniel', 'Samantha', 'Microsoft David', 'Microsoft Zira', 'Microsoft Mark'];
 
 function pickVoice() {
     const voices = listVoices();
     if (!voices.length) return null;
     const want = common.settingsStore.get('ttsVoice');
-    return voices.find(v => v.name === want)
-        || voices.find(v => v.name === 'Daniel')
-        || voices.find(v => v.name === 'Samantha')
-        || voices[0];
+    const stored = voices.find(v => v.name === want);
+    if (stored) return stored;
+    for (const name of PREFERRED_VOICES) {
+        const hit = voices.find(v => v.name === name || v.name.startsWith(`${name} `));
+        if (hit) return hit;
+    }
+    return voices[0];
 }
 
 function initTTS() {
@@ -1441,11 +1467,20 @@ function isSpeaking() {
     return typeof speechSynthesis !== 'undefined' && (speechSynthesis.speaking || speechSynthesis.pending);
 }
 
-function speak(text) {
-    if (!common.settingsStore.get('ttsEnabled')) return;
-    if (typeof speechSynthesis === 'undefined') return;
+/**
+ * Say one line. Returns the utterance so a caller can watch it, or null when
+ * nothing was said.
+ *
+ * `force` is for Test Voice, which must speak whether or not the rider has the
+ * setting on. It used to get there by writing ttsEnabled true, speaking, and
+ * writing it back false -- two store writes that woke both windows' listeners
+ * and flickered the overlay's mute button every time anyone pressed Test.
+ */
+function speak(text, { force = false } = {}) {
+    if (!force && !common.settingsStore.get('ttsEnabled')) return null;
+    if (typeof speechSynthesis === 'undefined') return null;
     const clean = String(text).trim();
-    if (!clean) return;
+    if (!clean) return null;
     try {
         const u = new SpeechSynthesisUtterance(clean);
         if (ttsVoice) u.voice = ttsVoice;
@@ -1459,8 +1494,10 @@ function speak(text) {
             }
         };
         speechSynthesis.speak(u);
+        return u;
     } catch (e) {
         console.warn('[Lunatic] speech failed:', e);
+        return null;
     }
 }
 
@@ -1749,7 +1786,10 @@ export async function lunaticAnnouncerSettingsMain() {
     await common.initSettingsForm('#api-options')();
     // Voice list must exist before the form binds, or the stored voice won't match.
     initTTS();
-    await populateVoicePicker();
+    // NOT awaited. It waits up to 3s for `voiceschanged`, and awaiting it here
+    // left every control in the window unwired for that whole time on a machine
+    // with no voices ready -- the tab strip, the provider fields, all of it.
+    populateVoicePicker();
     await common.initSettingsForm('#audio-options')();
     setupVoiceTest();
 
@@ -1803,6 +1843,10 @@ export async function lunaticAnnouncerSettingsMain() {
             renderPromptProviderNote();
             renderHelpLink();
         }
+        // The next-step row says whether it will speak. renderApiInfo(), not
+        // updateApiInfo(): repainting must not downgrade a box that a passing
+        // test earned, and muting says nothing about the provider settings.
+        if (changed.has('ttsEnabled')) renderApiInfo();
     });
 
     // Initial visibility
@@ -2089,9 +2133,13 @@ function renderApiInfo() {
     if (nextStep) {
         nextStep.hidden = state !== 'connected';
         if (state === 'connected') {
+            // Speech is ON by default, so the thing to say first is that it
+            // will start talking and how to stop it -- not that it is silent.
             const tts = common.settingsStore.get('ttsEnabled');
             nextStep.textContent = 'Close this window and ride — commentary fires when riders are ' +
-                'around you.' + (tts ? '' : ' Speech is off; turn it on under Settings › Announcer Audio.');
+                'around you. ' + (tts
+                    ? 'It speaks aloud; the speaker button in the announcer window mutes it.'
+                    : 'Speech is off; turn it on under Settings › Announcer Audio.');
         }
     }
     // A rider with no key, looking at a provider that needs one.
@@ -2943,11 +2991,27 @@ function renderStoredDataStatus() {
 /** getVoices() is often empty on the first synchronous call. */
 function populateVoicePicker() {
     return new Promise(resolve => {
+        /** One unselectable option, in place of an empty dropdown. */
+        const placeholder = text => {
+            const sel = document.getElementById('tts-voice');
+            if (!sel) return;
+            sel.textContent = '';
+            const opt = document.createElement('option');
+            opt.textContent = text;
+            opt.disabled = true;
+            sel.appendChild(opt);
+            sel.value = '';
+        };
+
         const fill = () => {
             const sel = document.getElementById('tts-voice');
             if (!sel) return resolve();
             const voices = listVoices();
-            if (!voices.length) return; // wait for voiceschanged
+            // getVoices() is legitimately empty for the first moments in a
+            // browser, so this is not yet "no voices" -- but an unexplained
+            // empty dropdown is never right either. Say what is happening, and
+            // replace it either with the voices or with the verdict below.
+            if (!voices.length) return placeholder('Looking for voices\u2026');
             const stored = common.settingsStore.get('ttsVoice') || '';
             sel.innerHTML = '';
             for (const v of voices) {
@@ -2968,21 +3032,58 @@ function populateVoicePicker() {
         if (typeof speechSynthesis !== 'undefined') {
             speechSynthesis.addEventListener('voiceschanged', fill, { once: true });
         }
-        setTimeout(resolve, 3000); // never block the settings page
+        // They are not coming. Now it IS "no voices", and the dropdown says so.
+        setTimeout(() => {
+            if (!listVoices().length) placeholder('No voices found on this computer');
+            resolve();
+        }, 3000);
     });
 }
+
+/** Where to install a voice, per platform. Both, because the mod runs on both. */
+const VOICE_HELP = 'Mac: System Settings \u203a Accessibility \u203a Spoken Content \u203a Manage Voices. ' +
+    'Windows: Settings \u203a Time & Language \u203a Speech \u203a Add voices.';
 
 function setupVoiceTest() {
     const btn = document.getElementById('test-voice-btn');
     if (!btn) return;
+    const status = document.getElementById('voice-test-status');
+    const setStatus = (text, cls = '') => {
+        if (!status) return;
+        status.textContent = text;
+        status.className = cls;
+    };
+
     btn.addEventListener('click', () => {
         cancelSpeech();
         ttsVoice = pickVoice();
-        // Speak regardless of the enabled toggle — this is an explicit test.
-        const wasEnabled = common.settingsStore.get('ttsEnabled');
-        if (!wasEnabled) common.settingsStore.set('ttsEnabled', true);
-        speak('And Rodriguez goes! Six hundred and forty watts, and he has cracked the front group wide open.');
-        if (!wasEnabled) common.settingsStore.set('ttsEnabled', false);
+
+        // The failure this control exists to report. Without it the button did
+        // nothing, said nothing, and left a rider to conclude the mod was
+        // broken -- when the machine simply has no voice installed.
+        if (!ttsVoice) {
+            setStatus(`No voices found on this computer. ${VOICE_HELP}`, 'error');
+            return;
+        }
+
+        setStatus(`Speaking\u2026 (${ttsVoice.name})`, 'loading');
+        // force: an explicit test speaks whether or not the setting is on.
+        const u = speak(
+            'And Rodriguez goes! Six hundred and forty watts, and he has cracked the front group wide open.',
+            { force: true });
+
+        if (!u) {
+            setStatus('This window cannot speak — speech synthesis is unavailable.', 'error');
+            return;
+        }
+        u.onend = () => setStatus('');
+        // speak() already logs; this is the half a rider needs to see.
+        const wasOnError = u.onerror;
+        u.onerror = ev => {
+            wasOnError?.(ev);
+            if (ev.error === 'interrupted' || ev.error === 'canceled') return setStatus('');
+            setStatus(`Could not speak: ${ev.error || 'unknown error'}. ${VOICE_HELP}`, 'error');
+        };
     });
 }
 

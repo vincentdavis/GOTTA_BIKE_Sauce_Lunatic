@@ -73,6 +73,47 @@
             </section>
 
             <section class="settings-section">
+                <h2>Announcer Audio</h2>
+                <p class="help-text">Speaks each line aloud as it streams in, so you can race without
+                    reading the overlay. On by default. Uses the voices built into your computer
+                    &mdash; no extra API cost and no network round trip. The <ms>volume_up</ms> button
+                    in the announcer window mutes it in one click.</p>
+                <form id="audio-options">
+                    <label>
+                        <key>Speak commentary aloud:</key>
+                        <input type="checkbox" name="ttsEnabled"/>
+                    </label>
+                    <label>
+                        <key>Speaking voice:</key>
+                        <select name="ttsVoice" id="tts-voice"></select>
+                    </label>
+                    <label>
+                        <key>Rate:</key>
+                        <input type="range" name="ttsRate" min="0.8" max="1.8" step="0.05"/>
+                        <input type="number" name="ttsRate" min="0.8" max="1.8" step="0.05" style="--size: 4"/>
+                    </label>
+                    <label>
+                        <key>Pitch:</key>
+                        <input type="range" name="ttsPitch" min="0.5" max="1.5" step="0.05"/>
+                        <input type="number" name="ttsPitch" min="0.5" max="1.5" step="0.05" style="--size: 4"/>
+                    </label>
+                    <label>
+                        <key>Volume:</key>
+                        <input type="range" name="ttsVolume" min="0" max="1" step="0.05"/>
+                    </label>
+                </form>
+                <div class="api-actions">
+                    <button type="button" id="test-voice-btn">Test Voice</button>
+                    <span id="voice-test-status"></span>
+                </div>
+                <p class="help-text">The built-in voices are serviceable; the free downloadable ones are
+                    much better at the same speed. <strong>Mac:</strong> System Settings &rsaquo;
+                    Accessibility &rsaquo; Spoken Content &rsaquo; Manage Voices &mdash; take an
+                    Enhanced or Premium voice. <strong>Windows:</strong> Settings &rsaquo; Time &amp;
+                    Language &rsaquo; Speech &rsaquo; Add voices.</p>
+            </section>
+
+            <section class="settings-section">
                 <h2>Display Options</h2>
                 <form id="display-options">
                     <label>
@@ -111,41 +152,6 @@
             </section>
 
 
-            <section class="settings-section">
-                <h2>Announcer Audio</h2>
-                <p class="help-text">Speaks each line aloud as it streams in, so you can race without
-                    reading the overlay. Uses your Mac's built-in voices &mdash; no extra API cost and no
-                    network round trip. The <ms>volume_up</ms> button in the main window mutes it quickly.</p>
-                <form id="audio-options">
-                    <label>
-                        <key>Speak commentary aloud:</key>
-                        <input type="checkbox" name="ttsEnabled"/>
-                    </label>
-                    <label>
-                        <key>Speaking voice:</key>
-                        <select name="ttsVoice" id="tts-voice"></select>
-                    </label>
-                    <label>
-                        <key>Rate:</key>
-                        <input type="range" name="ttsRate" min="0.8" max="1.8" step="0.05"/>
-                        <input type="number" name="ttsRate" min="0.8" max="1.8" step="0.05" style="--size: 4"/>
-                    </label>
-                    <label>
-                        <key>Pitch:</key>
-                        <input type="range" name="ttsPitch" min="0.5" max="1.5" step="0.05"/>
-                        <input type="number" name="ttsPitch" min="0.5" max="1.5" step="0.05" style="--size: 4"/>
-                    </label>
-                    <label>
-                        <key>Volume:</key>
-                        <input type="range" name="ttsVolume" min="0" max="1" step="0.05"/>
-                    </label>
-                </form>
-                <div class="api-actions">
-                    <button type="button" id="test-voice-btn">Test Voice</button>
-                </div>
-                <p class="help-text">Tip: Apple's free Enhanced/Premium voices sound noticeably better at the
-                    same speed &mdash; System Settings &rsaquo; Accessibility &rsaquo; Spoken Content &rsaquo; Manage Voices.</p>
-            </section>
         </div>
     </div>
 
@@ -553,7 +559,9 @@
                 </ol>
                 <p>Then click <strong>Test Connection</strong> &mdash; or
                 <strong>Connect anonymously</strong> on the hosted service &mdash; choose a voice on the
-                <strong>Voices</strong> tab, and ride. There is one voice setting and it applies to
+                <strong>Voices</strong> tab, and ride. It speaks aloud as it writes; the
+                <ms>volume_up</ms> button in the announcer window mutes it, and
+                <strong>Speak commentary aloud</strong> on the Settings tab is the same switch. There is one voice setting and it applies to
                 whichever provider you are on. The commentary fires on what happens on the road, not
                 on a timer.</p>
 

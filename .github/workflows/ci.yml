@@ -53,6 +53,7 @@ jobs:
           node scripts/overlay-boot-test.mjs
           node scripts/prompt-migration-test.mjs
           node scripts/data-fields-test.mjs
+          node scripts/voice-machines-test.mjs
 
       - name: Prompt tables and library
         # The mod and the service define the same voices in two files that

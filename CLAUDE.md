@@ -32,6 +32,7 @@ scripts/settings-boot-test.mjs  boots the settings window
 scripts/overlay-boot-test.mjs   boots the overlay, incl. the ~1Hz nearby handler
 scripts/prompt-migration-test.mjs  legacy voice ids land where they should
 scripts/data-fields-test.mjs       every Data Fields control is read; the powerMode migration
+scripts/voice-machines-test.mjs    the mod on Windows voices, non-English voices and none at all
 scripts/prompt-parity-test.mjs     the mod and the service define the same voices
 scripts/prompt-library-test.mjs    the library's storage rules, driven directly
 scripts/prompt-updates-test.mjs    the update check, against the real service handler
@@ -154,6 +155,23 @@ Both HTML files import the same module and call different entry points:
   independent-looking checkboxes that were really one else-if. W/kg is the 5-second average over a
   weight, so it goes only with `'smooth5'`; `sendPower60s` is a separate, additive box, which is why
   the select is labelled *Current power*.
+- **Speech is ON by default and the mod is not Mac-only.** `ttsEnabled` defaults true — the one-line
+  description is "spoken aloud", and the speaker button in the overlay titlebar is the one-click
+  mute. `listVoices()` prefers English but falls back to *every* voice when there is none: the
+  `/^en/i` filter alone was a silent kill switch on a non-English Windows, where it emptied the
+  list, `pickVoice()` returned null and nothing ever said why. `PREFERRED_VOICES` names Apple's
+  then Microsoft's; every name in it is a preference that falls through harmlessly. Nothing in this
+  repo has run on Windows — `voice-machines-test.mjs` models it, it does not prove it.
+- **`speak(text, {force})` returns the utterance, and Test Voice must never write `ttsEnabled`.**
+  It used to set it true, speak, and set it back false: two store writes that woke both windows'
+  listeners and flickered the overlay's mute button on every press. The returned utterance is how
+  the status span knows to say "Speaking…" and when to clear.
+- **`populateVoicePicker()` is never awaited at boot.** It waits up to 3s for `voiceschanged`, and
+  awaiting it left every control in the settings window unwired for that whole time on a machine
+  whose voices were not ready. It renders "Looking for voices…" immediately and settles on either
+  the real list or "No voices found on this computer" — an unexplained empty dropdown is never
+  right. The stub fires `onstart`/`onend` in a microtask, as a browser does *after* `speak()`
+  returns; firing them inline hides a handler that attaches too late.
 - **`#content` is a fixed-height flex column that scrolls; its children must not grow or shrink.**
   All three carry `flex: 0 0 auto`. `#commentary-container` was `flex: 1`, so it swallowed every
   spare pixel: in a tall window the previous lines were pinned to the bottom edge with a screen of

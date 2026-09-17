@@ -96,7 +96,15 @@ check('and says Connected', el('api-status-text').textContent === 'Connected');
 check('the inline result agrees', el('api-test-status').className === 'success', el('api-test-status').textContent);
 check('and the next step appears', el('api-next-step').hidden === false &&
     /Close this window and ride/.test(el('api-next-step').textContent), el('api-next-step').textContent);
-check('mentioning speech is off, because it is', /Speech is off/.test(el('api-next-step').textContent));
+// Speech is on by default now, so the row warns that it will talk rather than
+// that it will not. Both branches are asserted; the wrong one would be a lie
+// either way round.
+check('and says it will speak, because it will',
+    /speaks aloud/.test(el('api-next-step').textContent), el('api-next-step').textContent);
+settingsStore.set('ttsEnabled', false);
+check('muted, it says where the switch is instead',
+    /Speech is off/.test(el('api-next-step').textContent), el('api-next-step').textContent);
+settingsStore.set('ttsEnabled', true);
 
 settingsStore.set('claudeModel', 'claude-sonnet-5');
 check('changing a setting downgrades the box', el('api-info').className === 'api-info stale',
@@ -281,6 +289,43 @@ section('F14: the GOTTA.BIKE section says whether there is anything to read');
 
     settingsStore.set('/gotta-bike-sauce-athlete-data', { 11: { zpFTP: 300 } });
     check('one rider is not "1 riders"', /for 1 rider found/.test(line.textContent), line.textContent);
+}
+
+// F45: Test Voice had no status element and no speaking state at all. It
+// spoke, or it silently did nothing, and a rider could not tell which.
+section('F45: Test Voice says what happened');
+{
+    const status = el('voice-test-status');
+    speechSynthesis.spoken.length = 0;
+
+    fire(el('test-voice-btn'), 'click');
+    check('it actually speaks', speechSynthesis.spoken.length === 1,
+        `${speechSynthesis.spoken.length} utterance(s)`);
+    check('with words a commentator would say',
+        /Rodriguez/.test(speechSynthesis.spoken[0].text), speechSynthesis.spoken[0].text);
+    check('on the picked voice', speechSynthesis.spoken[0].voice?.name === 'Daniel',
+        String(speechSynthesis.spoken[0].voice?.name));
+    check('and says so while it is speaking', /Speaking/.test(status.textContent),
+        status.textContent);
+    // onstart/onend arrive after speak() returns, as they do in a browser --
+    // which is the whole reason speak() hands the utterance back.
+    await new Promise(r => setImmediate(r));
+    check('and clears the status when it finishes', status.textContent === '',
+        JSON.stringify(status.textContent));
+
+    // It used to write ttsEnabled true, speak, and write it back false: two
+    // store writes that woke BOTH windows and flickered the overlay's mute
+    // button every time anyone pressed Test.
+    settingsStore.set('ttsEnabled', false);
+    let writes = 0;
+    settingsStore.addEventListener('set', ev => { if (ev.data.key === 'ttsEnabled') writes++; });
+    speechSynthesis.spoken.length = 0;
+    fire(el('test-voice-btn'), 'click');
+    check('muted, an explicit test still speaks', speechSynthesis.spoken.length === 1,
+        `${speechSynthesis.spoken.length} utterance(s)`);
+    check('and it does not touch the shared setting to do it', writes === 0, `${writes} write(s)`);
+    check('which is still off afterwards', settingsStore.get('ttsEnabled') === false);
+    settingsStore.set('ttsEnabled', true);
 }
 
 section('the Help tab lists the built-in voices from the library');
