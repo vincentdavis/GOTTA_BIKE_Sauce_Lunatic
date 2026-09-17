@@ -888,6 +888,21 @@ body:not(.transparent-bg) {
     gap: 0.5em 1.5em;
 }
 
+/* The one non-checkbox on the tab: the per-rider power choice. */
+.power-mode-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    margin-bottom: 0.7em;
+}
+
+/* Dimmed, not hidden: the GOTTA.BIKE fields do nothing until that mod has
+   imported something, and a rider who ticked them should still find them.
+   The status line above stays at full strength — it is the explanation. */
+.settings-section.inert .data-field-group {
+    opacity: 0.45;
+}
+
 .field-checkbox {
     display: flex;
     align-items: center;

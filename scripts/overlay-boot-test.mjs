@@ -184,17 +184,21 @@ check('an empty tick is survivable', !dataErr, dataErr ? String(dataErr) : '');
 // Front-to-back, already sorted, with the sign convention Sauce actually uses:
 // a NEGATIVE gap means the rider is up the road.
 const pack = [
-    { athleteId: 1, gap: -12.4, watching: false, athlete: { fullname: 'A Rider' },
-      state: { heartrate: 168, speed: 41.2, grade: 0.03 },
+    { athleteId: 1, gap: -12.4, watching: false,
+      athlete: { fullname: 'A Rider', sanitizedFullname: 'A Rider', weight: 72 },
+      state: { heartrate: 168, speed: 41.2, grade: 0.03, power: 305 },
       stats: { power: { smooth: { 5: 320, 60: 295 } } } },
-    { athleteId: 2, gap: 0, watching: true, athlete: { fullname: 'You' },
-      state: { heartrate: 172, speed: 41.0, grade: 0.03 },
+    { athleteId: 2, gap: 0, watching: true,
+      athlete: { fullname: 'You', sanitizedFullname: 'You', weight: 75 },
+      state: { heartrate: 172, speed: 41.0, grade: 0.03, power: 336 },
       stats: { power: { smooth: { 5: 340, 60: 310 } } } },
-    { athleteId: 3, gap: 8.1, watching: false, athlete: { fullname: 'B Rider' },
-      state: { heartrate: 165, speed: 40.4, grade: 0.03 },
+    { athleteId: 3, gap: 8.1, watching: false,
+      athlete: { fullname: 'B Rider', sanitizedFullname: 'B Rider', weight: 68 },
+      state: { heartrate: 165, speed: 40.4, grade: 0.03, power: 271 },
       stats: { power: { smooth: { 5: 280, 60: 275 } } } },
-    { athleteId: 4, gap: 20.0, watching: false, athlete: { type: 'PACER_BOT', fullname: 'Bot' },
-      state: { heartrate: 0, speed: 40.0, grade: 0.03 },
+    { athleteId: 4, gap: 20.0, watching: false,
+      athlete: { type: 'PACER_BOT', fullname: 'Bot', sanitizedFullname: 'Bot' },
+      state: { heartrate: 0, speed: 40.0, grade: 0.03, power: 200 },
       stats: { power: { smooth: { 5: 200, 60: 200 } } } }
 ];
 try {
@@ -255,6 +259,75 @@ section('F10: "manual only" also means no unasked-for first line');
     // The stub has no network, so this logs one expected "[Lunatic] provider
     // error" as the call unwinds. That log line IS the evidence it fired.
     await new Promise(r => setImmediate(r));
+}
+
+section('F11-F16: what the Data Fields tab actually puts on the wire');
+{
+    // The strongest form of this test: capture the request body rather than
+    // trusting a flag. Six checkboxes on that tab were read by nothing at all,
+    // and nobody could tell because there is no prompt preview anywhere.
+    const realFetch = globalThis.fetch;
+    const realError = console.error;
+    console.error = () => {};       // every capture fails the call on purpose
+    let sent = null;
+    globalThis.fetch = async (url, opts) => {
+        sent = JSON.parse(opts.body);
+        throw new Error('captured — no network in this test');
+    };
+
+    const speak = async () => {
+        sent = null;
+        nearby([]);                         // rearm the first-data fire
+        nearby(pack);
+        await new Promise(r => setImmediate(r));
+        return sent?.messages?.[0]?.content || '';
+    };
+
+    settingsStore.set('claudeApiKey', 'sk-ant-api03-data-fields-key');
+    settingsStore.set('powerMode', 'smooth5');
+    let text = await speak();
+    check('a prompt really was built', /- A Rider/.test(text), text.slice(0, 80));
+
+    // F12: the two default-on power boxes were one else-if, so "Current Power"
+    // did nothing and unticking "5s rolling" switched to noisier instant power.
+    check('5-second average: the 5s figure goes', /5s: 320W/.test(text), text.match(/- A Rider.*/)?.[0]);
+    check('and watts per kilo rides along with it', /w\/kg/.test(text));
+
+    settingsStore.set('powerMode', 'instant');
+    text = await speak();
+    check('instant: state.power instead, with no 5s figure',
+        /- A Rider.*\b305W/.test(text) && !/5s: /.test(text), text.match(/- A Rider.*/)?.[0]);
+    // F15: w/kg is the 5s average over a weight, so it follows that choice
+    // rather than going out whenever a weight happens to exist.
+    check('and no watts per kilo, which is derived from the 5s average',
+        !/w\/kg/.test(text), text.match(/- A Rider.*/)?.[0]);
+
+    settingsStore.set('powerMode', 'off');
+    text = await speak();
+    const line = () => text.match(/- A Rider.*/)?.[0] || '';
+    check('off: no current-power figure and no watts per kilo',
+        !/5s: /.test(line()) && !/ 305W/.test(line()) && !/w\/kg/.test(line()), line());
+    // "60s average (their baseline)" is its own checkbox, so it survives the
+    // current-power choice going to Off -- which is why the select is labelled
+    // "Current power:" rather than "Power:".
+    check('but the 60s baseline stays, because it is a separate box',
+        /last minute: 295W/.test(line()), line());
+    settingsStore.set('powerMode', 'smooth5');
+
+    // F13: "Include watching athlete's data" never withheld anything — it moved
+    // the rider's own line out of road order into a YOU block. Now they are
+    // always in the field, in road order, and there is no YOU block at all.
+    text = await speak();
+    check('the watcher is in road order with everyone else', /^>> \(you\)/m.test(text),
+        text.match(/^>> .*/m)?.[0]);
+    check('and no separate YOU block is emitted', !/^YOU:/m.test(text));
+
+    // F15: the one thing the tab has no checkbox for.
+    check('names go with no toggle offered for them',
+        /A Rider/.test(text) && /B Rider/.test(text), text.match(/- .*/)?.[0]);
+
+    globalThis.fetch = realFetch;
+    console.error = realError;
 }
 
 const watchChange = subscribed.get('watching-athlete-change');

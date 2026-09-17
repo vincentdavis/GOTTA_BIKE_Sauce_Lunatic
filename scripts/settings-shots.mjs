@@ -108,8 +108,13 @@ export const STATES = [
           previous: { lunatic: { version: 1, systemPrompt: 'You are a live bike-race commentator who has lost it.\nRULES\n1. Call the EVENTS.\n2. One sentence, occasionally two.', userPromptTemplate: TEMPLATE } } } },
       tab: 'prompts-tab', act: async p => { await p.click('#prompt-notice-diff'); } },
     { name: '12-prompts-delete-armed', seed: KEYED, tab: 'prompts-tab', act: async p => { await p.click('#prompt-duplicate-btn'); await p.click('#prompt-delete-btn'); } },
-    { name: '13-data-tab', seed: {}, tab: 'data-tab' },
+    { name: '13-data-tab', seed: {}, tab: 'data-tab',
+      note: 'No GOTTA.BIKE import: that section is dimmed and says why.' },
     { name: '14-help-tab', seed: {}, tab: 'help-tab' },
+    { name: '15-data-tab-with-import', tab: 'data-tab',
+      seed: { '/gotta-bike-sauce-athlete-data': {
+        101: { zpFTP: 301, phenotype_value: 'Sprinter' }, 102: { zpFTP: 264 }, 103: { zpFTP: 355 } } },
+      note: 'The same tab once GOTTA.BIKE Sauce has imported something.' },
 ];
 
 // ---------------------------------------------------------------------------

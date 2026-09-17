@@ -257,6 +257,32 @@ check('and fall back to a built-in', picker.value === 'tour', picker.value);
 // and a whole section describing the design the prompt library replaced. The
 // list is rendered from library.listBuiltins() now, so it cannot drift from
 // the picker -- which is the property worth asserting.
+// F14: eight checkboxes read a key a DIFFERENT mod writes. Without GOTTA.BIKE
+// Sauce installed and populated every one is a no-op, three ship ticked, and
+// nothing on the tab said so — the settings window did not even load the data.
+section('F14: the GOTTA.BIKE section says whether there is anything to read');
+{
+    const line = el('stored-data-status');
+    const sect = el('stored-data-section');
+    check('empty: it says the fields do nothing yet',
+        /not installed, or has imported nothing yet/.test(line.textContent), line.textContent);
+    check('and offers somewhere to get it',
+        line.children.some(c => c.tagName === 'A' && /GOTTA_BIKE_sauce/.test(c.href)),
+        line.children.map(c => c.tagName).join(','));
+    check('the section is dimmed, not hidden', sect._classes.has('inert') && !sect.hidden);
+
+    // GOTTA.BIKE Sauce importing while this window is open.
+    settingsStore.set('/gotta-bike-sauce-athlete-data', { 11: { zpFTP: 300 }, 22: { zpFTP: 280 } });
+    check('a live import is counted', /Stored data for 2 riders found/.test(line.textContent),
+        line.textContent);
+    check('and the section comes back to full strength', !sect._classes.has('inert'));
+    check('the "get it" link is gone once it is there',
+        !line.children.some(c => c.tagName === 'A'), line.textContent);
+
+    settingsStore.set('/gotta-bike-sauce-athlete-data', { 11: { zpFTP: 300 } });
+    check('one rider is not "1 riders"', /for 1 rider found/.test(line.textContent), line.textContent);
+}
+
 section('the Help tab lists the built-in voices from the library');
 {
     const dl = el('help-voices');

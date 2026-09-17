@@ -438,19 +438,30 @@
     <div id="data-tab" class="tab-panel">
         <div class="settings-content">
             <section class="settings-section">
-                <h2>Live Data Fields</h2>
-                <p class="help-text">Select which live data to include in the analysis.</p>
+                <h2>What goes in the prompt</h2>
+                <p class="help-text">Each line describes one rider near you, up to
+                    <strong>Riders around you to describe</strong> on the Settings tab, and one for
+                    you. Names always go, whatever is ticked here. It is all sent to the provider on
+                    the <strong>AI Provider</strong> tab.</p>
 
                 <div class="data-field-group">
-                    <h3>Real-time Data</h3>
+                    <h3>Live, per rider</h3>
+                    <label class="power-mode-row">
+                        <key>Current power:</key>
+                        <select name="powerMode">
+                            <option value="smooth5">5-second average (recommended)</option>
+                            <option value="instant">Instant (noisy)</option>
+                            <option value="off">Off</option>
+                        </select>
+                    </label>
                     <div class="field-checkboxes">
                         <label class="field-checkbox">
-                            <input type="checkbox" name="sendPower" checked/>
-                            <span>Current Power (watts)</span>
+                            <input type="checkbox" name="sendPower60s" checked/>
+                            <span>60s average (their baseline)</span>
                         </label>
                         <label class="field-checkbox">
                             <input type="checkbox" name="sendHeartRate" checked/>
-                            <span>Heart Rate</span>
+                            <span>Heart rate (near max only)</span>
                         </label>
                         <label class="field-checkbox">
                             <input type="checkbox" name="sendGap" checked/>
@@ -458,7 +469,7 @@
                         </label>
                         <label class="field-checkbox">
                             <input type="checkbox" name="sendDraft" checked/>
-                            <span>Draft (watts saved)</span>
+                            <span>Draft (sheltered / in the wind)</span>
                         </label>
                         <label class="field-checkbox">
                             <input type="checkbox" name="sendSpeed" checked/>
@@ -466,108 +477,45 @@
                         </label>
                         <label class="field-checkbox">
                             <input type="checkbox" name="sendCadence"/>
-                            <span>Cadence</span>
+                            <span>Cadence (rpm)</span>
                         </label>
                     </div>
-                </div>
-
-                <div class="data-field-group">
-                    <h3>Power Duration Data</h3>
-                    <div class="field-checkboxes">
-                        <label class="field-checkbox">
-                            <input type="checkbox" name="sendPower5s"/>
-                            <span>5-second power</span>
-                        </label>
-                        <label class="field-checkbox">
-                            <input type="checkbox" name="sendPower15s" checked/>
-                            <span>5s rolling power (current effort)</span>
-                        </label>
-                        <label class="field-checkbox">
-                            <input type="checkbox" name="sendPower60s" checked/>
-                            <span>60s rolling power (their baseline)</span>
-                        </label>
-                        <label class="field-checkbox">
-                            <input type="checkbox" name="sendPower300s"/>
-                            <span>5-minute power</span>
-                        </label>
-                        <label class="field-checkbox">
-                            <input type="checkbox" name="sendPower1200s"/>
-                            <span>20-minute power</span>
-                        </label>
-                    </div>
+                    <p class="help-text">Heart rate goes only when a rider is pinned near their
+                        maximum &mdash; or raw, if no maximum is known for them. Watts per kilo rides
+                        along with the 5-second average.</p>
                 </div>
             </section>
 
-            <section class="settings-section">
-                <h2>Stored Athlete Data (GOTTA.BIKE)</h2>
-                <p class="help-text">Include stored power profiles and race data from GOTTA.BIKE.</p>
+            <section class="settings-section" id="stored-data-section">
+                <h2>From your GOTTA.BIKE Sauce import</h2>
+                <!-- Filled by renderStoredDataStatus(). These eight boxes read a
+                     key a DIFFERENT mod writes, and nothing on the tab said so. -->
+                <p class="help-text" id="stored-data-status"></p>
 
                 <div class="data-field-group">
-                    <h3>Power Profile</h3>
+                    <h3>From GOTTA.BIKE, per rider</h3>
                     <div class="field-checkboxes">
                         <label class="field-checkbox">
                             <input type="checkbox" name="sendFTP" checked/>
-                            <span>FTP (Functional Threshold Power)</span>
+                            <span>FTP</span>
                         </label>
-                        <label class="field-checkbox">
-                            <input type="checkbox" name="sendCP"/>
-                            <span>Critical Power</span>
-                        </label>
-                        <label class="field-checkbox">
-                            <input type="checkbox" name="sendPowerCurve"/>
-                            <span>Power curve (W/kg at durations)</span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="data-field-group">
-                    <h3>Phenotype & Suitability</h3>
-                    <div class="field-checkboxes">
                         <label class="field-checkbox">
                             <input type="checkbox" name="sendPhenotype" checked/>
-                            <span>Phenotype (sprinter, climber, etc.)</span>
+                            <span>Phenotype (sprinter, climber&hellip;)</span>
                         </label>
-                        <label class="field-checkbox">
-                            <input type="checkbox" name="sendRouteSuitability"/>
-                            <span>Route suitability (flat, hilly, etc.)</span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="data-field-group">
-                    <h3>Race History</h3>
-                    <div class="field-checkboxes">
                         <label class="field-checkbox">
                             <input type="checkbox" name="sendRaceRating" checked/>
                             <span>Race rating</span>
                         </label>
                         <label class="field-checkbox">
                             <input type="checkbox" name="sendRaceStats"/>
-                            <span>Race stats (wins, podiums, finishes)</span>
+                            <span>Race stats (wins, podiums)</span>
                         </label>
-                    </div>
-                </div>
-
-                <div class="data-field-group">
-                    <h3>Physical</h3>
-                    <div class="field-checkboxes">
                         <label class="field-checkbox">
                             <input type="checkbox" name="sendWeight"/>
                             <span>Weight</span>
                         </label>
                     </div>
-                </div>
-            </section>
-
-            <section class="settings-section">
-                <h2>Watching Athlete</h2>
-                <p class="help-text">Include the watching athlete's data for personalized tactical advice.</p>
-
-                <div class="field-checkboxes">
-                    <label class="field-checkbox">
-                        <input type="checkbox" name="includeWatchingAthlete" checked/>
-                        <span>Include watching athlete's data in analysis</span>
-                    </label>
                 </div>
             </section>
         </div>

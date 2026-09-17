@@ -174,30 +174,56 @@ common.settingsStore.setDefault({
     ttsVolume: 1,
     customSystemPrompt: '',
     customUserPrompt: '',
-    // Data field settings - live data
-    sendPower: true,
+    // Data field settings - live data. One choice for per-rider power:
+    // 'smooth5' (stats.power.smooth[5]), 'instant' (state.power) or 'off'.
+    powerMode: 'smooth5',
     sendHeartRate: true,
     sendGap: true,
     sendDraft: true,
     sendSpeed: true,
     sendCadence: false,
-    // Power duration data
-    sendPower5s: false,
-    sendPower15s: true,
     sendPower60s: true,
-    sendPower300s: false,
-    sendPower1200s: false,
-    // Stored data
+    // LEGACY. `sendPower` and `sendPower15s` were two independent-looking
+    // checkboxes that were really one else-if; migrateDataFields() folds them
+    // into powerMode. Never written and never read now -- kept so a downgrade
+    // finds what the rider had. sendPower5s, sendPower300s, sendPower1200s,
+    // sendCP, sendPowerCurve and sendRouteSuitability were never read by
+    // anything and are gone; there is no data shape behind any of them.
+    sendPower: true,
+    sendPower15s: true,
+    // Stored data, from the GOTTA.BIKE Sauce import
     sendFTP: true,
-    sendCP: false,
-    sendPowerCurve: false,
     sendPhenotype: true,
-    sendRouteSuitability: false,
     sendRaceRating: true,
     sendRaceStats: false,
-    sendWeight: false,
-    includeWatchingAthlete: true
+    sendWeight: false
 });
+
+const DATA_FIELDS_MIGRATED_KEY = 'dataFieldsMigrated';
+
+/**
+ * Fold the old two-checkbox power pair into one `powerMode`.
+ *
+ * html had "Current Power (watts)" and "5s rolling power", both ticked by
+ * default, in two different groups -- and riderLine() read them as
+ * `if (sendPower15s) … else if (sendPower)`. So with the defaults "Current
+ * Power" did nothing, and unticking "5s rolling" to send LESS switched the
+ * announcer to noisier instantaneous power. Map what actually happened:
+ * the 5s box wins if it is on, because it did.
+ *
+ * One shot behind its own flag, in both entry points, like every other
+ * migration here. The legacy keys are left exactly as the rider had them.
+ */
+function migrateDataFields() {
+    const store = common.settingsStore;
+    if (store.get(DATA_FIELDS_MIGRATED_KEY)) return;
+
+    if (store.get('sendPower15s')) store.set('powerMode', 'smooth5');
+    else if (store.get('sendPower')) store.set('powerMode', 'instant');
+    else store.set('powerMode', 'off');
+
+    store.set(DATA_FIELDS_MIGRATED_KEY, true);
+}
 
 // ============================================================================
 // One-time migration from the GOTTA.BIKE sauce build of this window
@@ -268,6 +294,7 @@ export async function lunaticAnnouncerMain() {
     // opens settings after upgrading still gets their own prompt back.
     library.migratePrompts(common.settingsStore);
     migrateModelSetting();
+    migrateDataFields();
     loadStoredAthleteData();
     sessionCost = common.settingsStore.get(COST_KEY) || 0;
     totalCalls = common.settingsStore.get(CALLS_KEY) || 0;
@@ -1058,6 +1085,12 @@ function effectiveMaxHR(rider) {
 }
 
 /** One rider's line. Shared by the field rows and the inline YOU row. */
+/** 'smooth5' | 'instant' | 'off' — the one per-rider power setting. */
+function powerMode() {
+    const m = common.settingsStore.get('powerMode');
+    return (m === 'instant' || m === 'off') ? m : 'smooth5';
+}
+
 function riderLine(rider, isYou) {
     const parts = [];
     const name = isYou ? '(you)' : (rider.athlete?.sanitizedFullname || rider.athlete?.fLast || 'Unknown');
@@ -1074,17 +1107,22 @@ function riderLine(rider, isYou) {
     // so labelling them "15s"/"1m" tells the model they are recent efforts).
     const p5 = rider.stats?.power?.smooth?.[5];
     const p60 = rider.stats?.power?.smooth?.[60];
-    if (common.settingsStore.get('sendPower15s') && p5 > 0) {
+    const mode = powerMode();
+    if (mode === 'smooth5' && p5 > 0) {
         parts.push(`5s: ${Math.round(p5)}W`);
-    } else if (common.settingsStore.get('sendPower') && rider.state?.power > 0) {
+    } else if (mode === 'instant' && rider.state?.power > 0) {
         parts.push(`${Math.round(rider.state.power)}W`);
     }
     if (common.settingsStore.get('sendPower60s') && p60 > 0) {
         parts.push(`last minute: ${Math.round(p60)}W`);
     }
 
+    // Watts per kilo is the 5-second average divided by a weight, so it goes
+    // with that average and not on its own. It used to go out whenever p5
+    // existed, gated by neither the power boxes nor "Weight" -- which is what
+    // made unticking Weight look like it withheld something.
     const kg = rider.athlete?.weight;
-    if (p5 > 0 && kg > 0) parts.push(`${(p5 / kg).toFixed(1)}w/kg`);
+    if (mode === 'smooth5' && p5 > 0 && kg > 0) parts.push(`${(p5 / kg).toFixed(1)}w/kg`);
 
     // HR is noise at rest and the story when pinned.
     const hr = rider.state?.heartrate;
@@ -1150,9 +1188,7 @@ function buildRidersText() {
         end = Math.min(nearbyData.length, wIdx + behindCount + 1);
     }
 
-    const inlineYou = !!common.settingsStore.get('includeWatchingAthlete');
     const rows = nearbyData.slice(start, end)
-        .filter(r => !r.watching || inlineYou)
         .filter(r => r.athlete?.type !== 'PACER_BOT')
         .map(r => riderLine(r, !!r.watching));
 
@@ -1160,14 +1196,20 @@ function buildRidersText() {
 }
 
 /**
- * The watcher is rendered inline in the road order by buildRidersText(), so this
- * returns ''. The function and the {watchingSection} placeholder are kept because
- * every preset embeds them and users can write custom templates against them.
+ * Always ''. The watcher is rendered inline in road order by buildRidersText().
+ *
+ * There used to be an "Include watching athlete's data" checkbox here. Unticking
+ * it did not withhold anything: it moved the rider's own line out of road order
+ * into a separate YOU block -- the same numbers, arguably with more attention on
+ * them -- while race context and the athlete id went out regardless. A label
+ * that says "include" and withholds nothing is worse than no label, and no
+ * truthful opt-out was reachable through that toggle, so it is gone.
+ *
+ * The function and the {watchingSection} placeholder stay: every preset embeds
+ * them and riders write their own templates against them.
  */
 function buildWatchingText() {
-    if (common.settingsStore.get('includeWatchingAthlete')) return '';
-    if (!watchingAthlete) return '';
-    return `YOU: ${riderLine(watchingAthlete, true)}`;
+    return '';
 }
 
 // ============================================================================
@@ -1250,7 +1292,8 @@ function detectEvents(data, now) {
             const held = track.samples.slice(-3).every(s => s.p5 > 0 && s.p60 > 0 && s.p5 >= 1.6 * s.p60);
             if (held && offCooldown(id, 'ATTACK', now)) {
                 const kg = r.athlete?.weight;
-                const wkg = kg > 0 ? `, ${(cur.p5 / kg).toFixed(1)} watts per kilo` : '';
+                const wkg = (kg > 0 && powerMode() === 'smooth5')
+                    ? `, ${(cur.p5 / kg).toFixed(1)} watts per kilo` : '';
                 found.push({ kind: 'ATTACK', id, score: SCORES.ATTACK,
                     text: `ATTACK: ${name} ${Math.round(cur.p5)} watts${wkg}, was ${Math.round(cur.p60)} for the last minute` });
             }
@@ -1694,6 +1737,8 @@ export async function lunaticAnnouncerSettingsMain() {
     // Drop any retired/unknown stored model BEFORE the form binds, so the
     // dropdown loads a value that actually matches one of its options.
     migrateModelSetting();
+    // Before setupDataFields() reads powerMode into the select.
+    migrateDataFields();
 
     // Initialize settings form — the returned callback MUST be invoked (the
     // trailing ()) or fields never load and every edit throws before saving.
@@ -1705,6 +1750,10 @@ export async function lunaticAnnouncerSettingsMain() {
     await populateVoicePicker();
     await common.initSettingsForm('#audio-options')();
     setupVoiceTest();
+
+    // The Data Fields tab reports whether the GOTTA.BIKE import has anything
+    // in it, so this window needs the data too -- only the overlay loaded it.
+    loadStoredAthleteData();
 
     // Setup custom controls
     setupApiKeyToggle();
@@ -1725,6 +1774,11 @@ export async function lunaticAnnouncerSettingsMain() {
     renderCost();
     common.settingsStore.addEventListener('set', ev => {
         if (ev.data.key === COST_KEY || ev.data.key === CALLS_KEY) renderCost();
+        // GOTTA.BIKE Sauce importing while this window is open.
+        if (ev.data.key === ATHLETE_DATA_KEY) {
+            storedAthleteData = ev.data.value || {};
+            renderStoredDataStatus();
+        }
     });
 
     // Listen for settings changes
@@ -2827,7 +2881,7 @@ function updateCustomColorVisibility() {
 }
 
 function setupDataFields() {
-    // All checkboxes are handled by initSettingsForm, but we can add any custom logic here
+    // This tab has no <form>, so nothing here is bound by initSettingsForm.
     const checkboxes = document.querySelectorAll('.field-checkbox input[type="checkbox"]');
 
     checkboxes.forEach(checkbox => {
@@ -2839,6 +2893,49 @@ function setupDataFields() {
             });
         }
     });
+
+    const power = document.querySelector('select[name="powerMode"]');
+    if (power) {
+        power.value = powerMode();
+        power.addEventListener('change', () => common.settingsStore.set('powerMode', power.value));
+    }
+
+    renderStoredDataStatus();
+}
+
+/**
+ * Say whether the GOTTA.BIKE import this section reads has anything in it.
+ *
+ * These boxes read a key a DIFFERENT mod writes (ATHLETE_DATA_KEY is global and
+ * read-only here). Without GOTTA.BIKE Sauce installed and populated every one is
+ * a no-op, three of them ship ticked, and there was no way to tell short of
+ * listening for FTP in the commentary. The settings window did not even load the
+ * data -- only the overlay did.
+ */
+function renderStoredDataStatus() {
+    const line = document.getElementById('stored-data-status');
+    const section = document.getElementById('stored-data-section');
+    if (!line) return;
+
+    const count = Object.keys(storedAthleteData || {}).length;
+    line.textContent = '';
+    if (count) {
+        line.appendChild(document.createTextNode(
+            `Reads the data the GOTTA.BIKE Sauce mod imports. Stored data for ${count} ` +
+            `${count === 1 ? 'rider' : 'riders'} found.`));
+    } else {
+        line.appendChild(document.createTextNode(
+            'GOTTA.BIKE Sauce is not installed, or has imported nothing yet — these fields do ' +
+            'nothing until it does. '));
+        const link = document.createElement('a');
+        link.href = 'https://github.com/vincentdavis/GOTTA_BIKE_sauce';
+        link.target = '_blank';
+        link.rel = 'noreferrer';
+        link.textContent = 'Get\u00a0it';
+        line.appendChild(link);
+    }
+    // Dimmed, not hidden: a rider who ticked these should still find them.
+    section?.classList.toggle('inert', !count);
 }
 
 /** getVoices() is often empty on the first synchronous call. */

@@ -71,6 +71,10 @@ and have imported rider data there, this mod reads it automatically to enrich th
 commentary with FTP, phenotype, race rating and win counts. It is entirely
 optional — the announcer works from live Zwift data alone.
 
+The **Data Fields** tab says which it is: with nothing imported, that section is
+dimmed and tells you the fields do nothing until GOTTA.BIKE sauce has run;
+otherwise it reports how many riders it found.
+
 ## Development
 
 ```bash

@@ -16,7 +16,7 @@ as the "Live Commentary" window.
 manifest.json              mod metadata + the single window definition
 pages/announcer.html       overlay window
 pages/announcer-settings.html  settings (Settings/API/Prompts/Data/Help tabs)
-pages/src/announcer.mjs    all logic (~1900 lines)
+pages/src/announcer.mjs    all logic (~3000 lines)
 pages/src/prompts.mjs      the built-in announcer voices (leaf module)
 pages/src/prompt-library.mjs   the rider's own prompts + the server cache; takes the store
 pages/src/prompt-updates.mjs   the daily check against GET /v1/prompts
@@ -30,6 +30,7 @@ scripts/settings-shots.mjs  screenshots every settings-window state in Chromium 
 scripts/settings-boot-test.mjs  boots the settings window
 scripts/overlay-boot-test.mjs   boots the overlay, incl. the ~1Hz nearby handler
 scripts/prompt-migration-test.mjs  legacy voice ids land where they should
+scripts/data-fields-test.mjs       every Data Fields control is read; the powerMode migration
 scripts/prompt-parity-test.mjs     the mod and the service define the same voices
 scripts/prompt-library-test.mjs    the library's storage rules, driven directly
 scripts/prompt-updates-test.mjs    the update check, against the real service handler
@@ -132,6 +133,20 @@ Both HTML files import the same module and call different entry points:
   Only the overlay subscribes to `nearby`, so it publishes the id to
   `ATHLETE_ID_KEY` and `authHeader()` reads it. `/v1/quota` echoes `bucket` so the
   client can refuse to overwrite the shared `QUOTA_KEY` from the wrong one.
+- **A checkbox on the Data Fields tab must be read by `riderLine()`.** Six of nineteen were read
+  by nothing at all, for as long as the tab existed, because a box that saves looks exactly like a
+  box that works. `scripts/data-fields-test.mjs` reads the tab's `name=` attributes out of the HTML
+  and fails if any has no `get('<name>')` in `announcer.mjs`; `overlay-boot-test.mjs` captures the
+  real request body and asserts what actually goes on the wire. Add a control, wire it, or neither.
+- **Per-rider power is one setting, `powerMode`** (`'smooth5' | 'instant' | 'off'`), read through
+  `powerMode()`. `sendPower` and `sendPower15s` are migrated-away legacy keys — they were two
+  independent-looking checkboxes that were really one else-if. W/kg is the 5-second average over a
+  weight, so it goes only with `'smooth5'`; `sendPower60s` is a separate, additive box, which is why
+  the select is labelled *Current power*.
+- **The watcher is always inline, in road order.** `buildWatchingText()` returns `''`
+  unconditionally; `{watchingSection}` stays because every preset embeds it. The old
+  "Include watching athlete's data" toggle withheld nothing — it only moved the line into a
+  separate YOU block, while race context and the athlete id went out either way.
 - **There are two independent triggers, and "manual" means both are off.** `eventDriven` fires
   from the 1Hz `nearby` tick via `shouldFireNow()`; `updateInterval` is a clock that is a
   longest-silence floor when events are on and a plain timer when they are not. Read it only
