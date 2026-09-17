@@ -3,7 +3,13 @@
    mod's own structure, flow, copy and states — not these base colours. */
 html { background:#1a1a1a; color:#e6e6e6; font:14px/1.45 -apple-system,"Segoe UI",system-ui,sans-serif; }
 body { margin:0; }
-#titlebar header { display:flex; align-items:center; gap:.6em; padding:.45em .8em; background:#0f0f0f; border-bottom:1px solid #2a2a2a; }
+/* 40px, because the overlay's #content is `height: calc(100vh - 40px)` and is
+   calibrated to the real titlebar. Without a height here the bar grew to fit a
+   COLUMN of buttons (.buttons had no display:flex), #content overflowed the
+   viewport, and a grow-to-fill bug inside it could not show itself. */
+#titlebar header { display:flex; align-items:center; gap:.6em; padding:0 .8em; height:40px;
+  box-sizing:border-box; background:#0f0f0f; border-bottom:1px solid #2a2a2a; }
+#titlebar .buttons { display:flex; align-items:center; gap:.6em; }
 #titlebar .logo img { width:22px; height:22px; display:block; }
 #titlebar .title { font-weight:600; font-size:.95em; }
 #titlebar .filler { flex:1; }

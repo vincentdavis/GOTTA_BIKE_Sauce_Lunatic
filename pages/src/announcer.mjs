@@ -1674,8 +1674,10 @@ function saveToHistory(commentary) {
         timestamp: new Date()
     });
 
-    // Trim to max count
-    commentaryHistory = commentaryHistory.slice(0, historyCount);
+    // +1: entry 0 is the line on screen above, not history. "How many to show:
+    // 3" kept three entries in all and rendered slice(1), so a rider who asked
+    // for three previous lines got two.
+    commentaryHistory = commentaryHistory.slice(0, historyCount + 1);
 
     // Update history display
     renderHistory();

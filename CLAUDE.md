@@ -27,6 +27,7 @@ scripts/lib/stub-dom.mjs   a DOM + Sauce `common` small enough to boot the mod i
 scripts/lib/browser-common-stub.mjs   the same `common` stub, for a real browser
 scripts/lib/sauce-common-approx.css   an APPROXIMATION of Sauce's base stylesheet
 scripts/settings-shots.mjs  screenshots every settings-window state in Chromium at 700×600
+scripts/overlay-shots.mjs   screenshots the OVERLAY at five window sizes; fails on a layout gap
 scripts/settings-boot-test.mjs  boots the settings window
 scripts/overlay-boot-test.mjs   boots the overlay, incl. the ~1Hz nearby handler
 scripts/prompt-migration-test.mjs  legacy voice ids land where they should
@@ -57,6 +58,16 @@ Sauce opens the window at **700×600** — judge everything at that size. The ba
 stylesheet is an approximation and `<ms>` icons are placeholder glyphs; the mod's own
 `announcer.css` is real. Set `CHROMIUM_PATH` if the machine's browser build does not match its
 Playwright version — the harness never downloads one.
+
+`scripts/overlay-shots.mjs` does the same for the **overlay**, at five window sizes, and measures
+the blank space between the current line and the history — it exits non-zero if that exceeds 40px.
+The overlay had no viewer at all until a rider reported a screen of black between the two, and
+neither boot tests nor `node --check` can see a layout bug. Two things made it invisible longer
+than it should have been: `sauce-common-approx.css` let the titlebar grow to fit a *column* of
+buttons, so `#content`'s `calc(100vh - 40px)` overflowed and nothing could grow inside it — keep
+that bar at **40px**, the height the mod's CSS is calibrated to. And the gap must be measured from
+`#current-commentary`, not from `#commentary-container`: the container was the thing growing, so
+its own bottom sat flush against the history while ~600px of nothing opened up inside it.
 
 Both HTML files import the same module and call different entry points:
 `lunaticAnnouncerMain()` and `lunaticAnnouncerSettingsMain()`.
@@ -143,6 +154,15 @@ Both HTML files import the same module and call different entry points:
   independent-looking checkboxes that were really one else-if. W/kg is the 5-second average over a
   weight, so it goes only with `'smooth5'`; `sendPower60s` is a separate, additive box, which is why
   the select is labelled *Current power*.
+- **`#content` is a fixed-height flex column that scrolls; its children must not grow or shrink.**
+  All three carry `flex: 0 0 auto`. `#commentary-container` was `flex: 1`, so it swallowed every
+  spare pixel: in a tall window the previous lines were pinned to the bottom edge with a screen of
+  black above them (which reads as "the history never updates" — it is nowhere near the line that
+  just changed), and at the 420×340 default bounds it pushed them off-screen entirely while the
+  current line scrolled inside a squashed inner box.
+- **`historyCount` is how many PREVIOUS lines show.** `commentaryHistory[0]` is the line already on
+  screen above, and `renderHistory()` renders `slice(1)`, so the array is trimmed to
+  `historyCount + 1`. Trimming to `historyCount` gave a rider who asked for three exactly two.
 - **The watcher is always inline, in road order.** `buildWatchingText()` returns `''`
   unconditionally; `{watchingSection}` stays because every preset embeds it. The old
   "Include watching athlete's data" toggle withheld nothing — it only moved the line into a

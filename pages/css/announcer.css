@@ -38,6 +38,7 @@ body.solid-background {
 /* Status Bar */
 #status-bar {
     display: flex;
+    flex: 0 0 auto;
     align-items: center;
     gap: 0.7em;
     padding: 0.35em 0.6em;
@@ -100,8 +101,11 @@ body.solid-background {
 
 /* Commentary Container */
 #commentary-container {
-    flex: 1;
-    overflow-y: auto;
+    /* NOT flex:1. It used to grow to fill the window, which pushed the history
+       block to the bottom edge: one line at the top, a screen of black, then
+       the previous lines far below — so the history looked frozen because it
+       was nowhere near the line that had just changed. */
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
     gap: 0.5em;
@@ -172,6 +176,7 @@ body.solid-background {
 
 /* History Container */
 #history-container {
+    flex: 0 0 auto;
     border-top: 1px solid #333;
     padding-top: 0.5em;
 }
@@ -186,7 +191,6 @@ body.solid-background {
     display: flex;
     flex-direction: column;
     gap: 0.4em;
-    padding-top: 0.5em;
 }
 
 .history-entry {
