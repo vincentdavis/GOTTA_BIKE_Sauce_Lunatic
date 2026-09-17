@@ -518,6 +518,36 @@ body:not(.transparent-bg) {
 .api-info.failed .api-value { color: #efb3a8; }
 .api-info.stale .api-value { color: #e0a33a; }
 
+/* Out of free calls. The same red as a failed test, because every call is now
+   failing -- this used to render as the green "Configured". */
+.api-info.exhausted {
+    background: rgba(215, 90, 68, 0.1);
+    border-color: rgba(215, 90, 68, 0.35);
+}
+
+.api-info.exhausted .api-value { color: #efb3a8; }
+
+/* The allowance line at zero: the remedy, not grey help text at the same
+   weight as the paragraph below it. */
+.help-text.error {
+    color: #efb3a8;
+}
+
+/* "Have a key already?" — the recovery for a sign-in whose window was closed. */
+.paste-key {
+    margin: 0.4em 0 0.8em;
+    font-size: 0.9em;
+}
+
+.paste-key summary {
+    cursor: pointer;
+    color: #9db4c0;
+}
+
+.paste-key label {
+    margin-top: 0.5em;
+}
+
 .api-next-step {
     margin: 0.6em 0 0;
     font-size: 0.9em;

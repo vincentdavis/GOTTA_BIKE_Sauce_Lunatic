@@ -173,8 +173,9 @@ export function successPage({ account, key, paired }) {
   <h1>Signed in as ${who}</h1>
   ${paired
     ? `<p class="sub ok">Your announcer is connected. You can close this tab and go back to Sauce.</p>`
-    : `<p class="sub">Your key is ready. The mod did not pick it up automatically, so copy it into
-       the settings window yourself &mdash; <strong>AI Provider</strong> tab, Lunatic hosted.</p>`}
+    : `<p class="sub">Your key is ready. The mod did not pick it up automatically, so copy it in
+       yourself &mdash; settings window, <strong>AI Provider</strong> tab, then
+       <strong>Have a key already? Paste it</strong> under the connect buttons.</p>`}
   <div class="key" id="k">${esc(key)}</div>
   <button type="button" id="c">Copy key</button>
   <p class="hint">Keep this key private &mdash; anyone who has it can spend your monthly allowance.

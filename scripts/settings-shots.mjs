@@ -60,7 +60,9 @@ const server = createServer((req, res) => {
         { id: 'free-fast', label: 'Fast', description: 'Lowest latency. The commentary starts talking soonest.' },
         { id: 'free-balanced', label: 'Balanced', description: 'A better turn of phrase, at slightly higher latency.' },
         { id: 'free-colour', label: 'Colour', description: 'The most characterful of the three. Slowest to first word.' }] });
-    if (p === '/v1/quota') return json(res, { remaining: 137, limit: 150 });
+    if (p === '/v1/quota') return json(res, {
+        remaining: Number(process.env.SHOT_QUOTA ?? 137), limit: 150,
+        resetsAt: '2026-10-01T00:00:00.000Z', tier: 'anon', bucket: 'd:mock' });
     if (p === '/v1/device') return json(res, { token: 'lun_mock_device_token' });
     if (p === '/v1/prompts') return json(res, { object: 'list', revision: promptsRevision(), default: 'tour', data: listPromptDefinitions() });
     const rel = p.startsWith('/pages/') ? p.slice('/pages/'.length) : p.replace(/^\//, '');
@@ -111,6 +113,19 @@ export const STATES = [
     { name: '13-data-tab', seed: {}, tab: 'data-tab',
       note: 'No GOTTA.BIKE import: that section is dimmed and says why.' },
     { name: '14-help-tab', seed: {}, tab: 'help-tab' },
+    { name: '16-api-hosted-exhausted', seed: { ...HOSTED,
+        '/gotta-bike-lunatic-device-token': 'lun_mock_device_token',
+        '/gotta-bike-lunatic-quota': 0,
+        '/gotta-bike-lunatic-quota-info': { remaining: 0, limit: 150,
+            resetsAt: '2026-10-01T00:00:00.000Z', tier: 'anon' } },
+      tab: 'api-tab', quota: 0,
+      note: 'Out of free calls — the state a free rider is in for most of the month.' },
+    { name: '17-api-hosted-nearly-out', seed: { ...HOSTED,
+        '/gotta-bike-lunatic-device-token': 'lun_mock_device_token',
+        '/gotta-bike-lunatic-quota': 8,
+        '/gotta-bike-lunatic-quota-info': { remaining: 8, limit: 150,
+            resetsAt: '2026-10-01T00:00:00.000Z', tier: 'anon' } },
+      tab: 'api-tab', quota: 8, note: 'Warned before the overlay goes quiet.' },
     { name: '15-data-tab-with-import', tab: 'data-tab',
       seed: { '/gotta-bike-sauce-athlete-data': {
         101: { zpFTP: 301, phenotype_value: 'Sprinter' }, 102: { zpFTP: 264 }, 103: { zpFTP: 355 } } },
@@ -133,6 +148,8 @@ for (const st of STATES) {
     // reported per state. Network noise from the daily prompt check reaching
     // out to the real service is not an error of the page.
     page.on('pageerror', e => errors.push(String(e)));
+    if (st.quota !== undefined) process.env.SHOT_QUOTA = String(st.quota);
+    else delete process.env.SHOT_QUOTA;
     await page.addInitScript(seed => { window.__SEED = seed; }, st.seed);
     await page.goto(`${BASE}/pages/announcer-settings.html`);
     await page.waitForTimeout(3600);   // populateVoicePicker waits up to 3s for voices; headless has none

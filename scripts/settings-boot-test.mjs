@@ -530,6 +530,184 @@ section('G01: the settings window asks about the bucket commentary spends from')
     globalThis.fetch = async () => { throw new Error('no network in this test'); };
 }
 
+// G02: "0 left" is where a free rider sits for most of the month -- the
+// anonymous allowance is about one racing hour -- and it rendered identically
+// to a healthy one: "Connected", a green box, grey help text, no remedy, no
+// date, while the overlay said "Monthly limit reached".
+section('G02: an exhausted allowance does not look like a healthy one');
+{
+    const quotaBody = (remaining, extra = {}) => ({
+        remaining, limit: 150, bucket: 'z:123456',
+        resetsAt: '2026-10-01T00:00:00.000Z', tier: 'anon', ...extra
+    });
+    const serve = body => { globalThis.fetch = async (url) => ({
+        ok: true, status: 200, headers: { get: () => null },
+        json: async () => String(url).endsWith('/v1/models')
+            ? { data: [{ id: 'free-fast', label: 'Fast' }] } : body
+    }); };
+
+    serve(quotaBody(0));
+    fire(el('hosted-connect-btn'), 'click');
+    await settle();
+
+    check('the connection row says it is out, not Connected',
+        /Out of free calls until (1 October|October 1)/.test(el('hosted-status').textContent),
+        el('hosted-status').textContent);
+    check('the Status box is not green', el('api-info').className.includes('exhausted'),
+        el('api-info').className);
+    check('and says when it comes back',
+        /Out of free calls until (1 October|October 1)/.test(el('api-status-text').textContent),
+        el('api-status-text').textContent);
+    check('the allowance line names the remedy',
+        /Sign in with Discord/.test(el('hosted-quota').textContent), el('hosted-quota').textContent);
+    // The date follows the rider's locale, so accept either order.
+    check('and the reset date', /resets (1 October|October 1)/.test(el('hosted-quota').textContent),
+        el('hosted-quota').textContent);
+    check('at error weight, not grey help text',
+        /error/.test(el('hosted-quota').className), el('hosted-quota').className);
+    // ...and says nothing at all, rather than repeating the line above it.
+    check('the next-step row stops saying "close this window and ride"',
+        el('api-next-step').hidden === true, el('api-next-step').textContent);
+
+    // A Discord rider at zero has a different remedy: their own key.
+    serve(quotaBody(0, { tier: 'account' }));
+    fire(el('hosted-connect-btn'), 'click');
+    await settle();
+    check('an account at zero is pointed at its own key, not at Discord',
+        /your own API key/.test(el('hosted-quota').textContent) &&
+        !/Sign in with Discord/.test(el('hosted-quota').textContent),
+        el('hosted-quota').textContent);
+
+    // Warn before the overlay goes quiet, not after.
+    serve(quotaBody(9));
+    fire(el('hosted-connect-btn'), 'click');
+    await settle();
+    check('nearly out is amber and says so', /warn/.test(el('hosted-quota').className) &&
+        /9 of 150/.test(el('hosted-quota').textContent),
+        `${el('hosted-quota').className} — ${el('hosted-quota').textContent}`);
+
+    serve(quotaBody(120));
+    fire(el('hosted-connect-btn'), 'click');
+    await settle();
+    check('a healthy allowance is plain', el('hosted-quota').className === 'help-text',
+        el('hosted-quota').className);
+    check('and back to Connected', el('hosted-status').textContent === 'Connected',
+        el('hosted-status').textContent);
+
+    // F17: one readout. The Cost Tracking card duplicated the allowance from a
+    // second source and drifted from it, under a "Session cost:" label that was
+    // neither a cost nor per-session, with a reset button that did not reset it.
+    check('the Cost Tracking card is hidden on hosted', el('cost-section').hidden === true);
+
+    // It must stay live: spending during a ride changes it under this window.
+    settingsStore.set('/gotta-bike-lunatic-quota', 0);
+    check('spending down to zero updates the line without a refetch',
+        /^0 of 150 free calls left — resets/.test(el('hosted-quota').textContent),
+        el('hosted-quota').textContent);
+    check('and the Status box with it', el('api-info').className.includes('exhausted'),
+        el('api-info').className);
+
+    globalThis.fetch = async () => { throw new Error('no network in this test'); };
+}
+
+// G03: the pending sign-in had no exit. Three concrete failures, all here.
+section('G03: a sign-in in flight can be escaped, and survives the window');
+{
+    el('hosted-base-url').value = 'https://service.example';
+    settingsStore.set('/gotta-bike-lunatic-device-token', '');
+    settingsStore.set('/gotta-bike-lunatic-pairing', null);
+
+    // Never completes: the browser half is where a rider walks away.
+    globalThis.fetch = async (url, opts = {}) => {
+        if (opts.signal?.aborted) throw new DOMException('aborted', 'AbortError');
+        const body = String(url).endsWith('/v1/pair/start')
+            ? { verifyUrl: 'https://service.example/pair/ABCD', pollToken: 'pt_1', expiresIn: 900 }
+            : { status: 'pending' };
+        return { ok: true, status: 200, json: async () => body, headers: { get: () => null } };
+    };
+
+    fire(el('hosted-signin-btn'), 'click');
+    await settle();
+
+    check('there is a way out', el('hosted-cancel-btn').hidden === false);
+    check('and the sign-in button is out of the way', el('hosted-signin-btn').hidden === true);
+    // Disabled grey beside a live blue actively steered the rider here, and
+    // pressing it produced a working connection plus a red "Timed out" 15
+    // minutes later.
+    check('"Connect anonymously" cannot be pressed mid-flow',
+        el('hosted-connect-btn').disabled === true);
+    check('and the window says to stay open', el('hosted-signin-hint').hidden === false);
+    check('the browser link is offered', el('hosted-signin-link').hidden === false,
+        el('hosted-signin-link').href);
+    check('the pairing is persisted, so closing this window does not strand it',
+        settingsStore.get('/gotta-bike-lunatic-pairing')?.pollToken === 'pt_1',
+        JSON.stringify(settingsStore.get('/gotta-bike-lunatic-pairing')));
+
+    fire(el('hosted-cancel-btn'), 'click');
+    await settle();
+    check('cancelling ends it', el('hosted-cancel-btn').hidden === true &&
+        el('hosted-signin-btn').hidden === false);
+    check('re-enables the anonymous path', el('hosted-connect-btn').disabled === false);
+    check('drops the stale browser link', el('hosted-signin-link').hidden === true);
+    check('forgets the pairing', !settingsStore.get('/gotta-bike-lunatic-pairing'),
+        JSON.stringify(settingsStore.get('/gotta-bike-lunatic-pairing')));
+    check('and says so without calling it an error',
+        el('hosted-status').textContent === 'Sign-in cancelled' &&
+        el('hosted-status').className !== 'error',
+        `${el('hosted-status').textContent} / ${el('hosted-status').className}`);
+
+    globalThis.fetch = async () => { throw new Error('no network in this test'); };
+}
+
+section('G03: a key can be pasted, because the service tells riders to');
+{
+    // The service's sign-in page says to copy the key in by hand when the mod
+    // did not collect it. There was no field to copy it into.
+    settingsStore.set('/gotta-bike-lunatic-device-token', '');
+    el('hosted-paste-key').value = 'not-a-key';
+    fire(el('hosted-paste-btn'), 'click');
+    await settle();
+    check('junk is refused before it is stored',
+        /does not look like a key/.test(el('hosted-status').textContent),
+        el('hosted-status').textContent);
+    check('and nothing was stored', !settingsStore.get('/gotta-bike-lunatic-device-token'));
+
+    globalThis.fetch = async (url) => ({
+        ok: true, status: 200, headers: { get: () => null },
+        json: async () => String(url).endsWith('/v1/models')
+            ? { data: [{ id: 'free-fast', label: 'Fast' }] }
+            : { remaining: 400, limit: 400, bucket: 'u:disc', tier: 'account',
+                resetsAt: '2026-10-01T00:00:00.000Z' }
+    });
+    el('hosted-paste-key').value = 'luna_pasted_by_hand';
+    fire(el('hosted-paste-btn'), 'click');
+    await settle();
+    check('a real key is adopted',
+        settingsStore.get('/gotta-bike-lunatic-device-token') === 'luna_pasted_by_hand',
+        String(settingsStore.get('/gotta-bike-lunatic-device-token')));
+    check('the field is cleared once it is in', el('hosted-paste-key').value === '',
+        el('hosted-paste-key').value);
+    check('and it connects', el('hosted-status').textContent === 'Connected',
+        el('hosted-status').textContent);
+
+    // A key the service rejects must not be left behind as the stored token.
+    settingsStore.set('/gotta-bike-lunatic-device-token', '');
+    globalThis.fetch = async () => ({
+        ok: false, status: 401, headers: { get: () => null },
+        json: async () => ({ error: { message: 'Missing or invalid token.' } })
+    });
+    el('hosted-paste-key').value = 'luna_stale_key';
+    fire(el('hosted-paste-btn'), 'click');
+    await settle();
+    check('a rejected key is not left in storage',
+        !settingsStore.get('/gotta-bike-lunatic-device-token'),
+        String(settingsStore.get('/gotta-bike-lunatic-device-token')));
+    check('and the refusal is shown', /invalid token/i.test(el('hosted-status').textContent),
+        el('hosted-status').textContent);
+
+    globalThis.fetch = async () => { throw new Error('no network in this test'); };
+}
+
 section('sign-out');
 const fired = fire(el('hosted-signout-btn'), 'click');
 check('sign-out is wired', fired === 1);

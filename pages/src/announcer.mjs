@@ -2,7 +2,8 @@ import * as common from '/pages/src/common.mjs';
 // Relative specifier: '/pages/src/...' is SAUCE CORE, not this mod, even
 // though the mod's own file sits at the same relative path on disk.
 import {
-    PROVIDERS, DEFAULT_PROVIDER, COMPATIBLE_PRESETS, DEVICE_TOKEN_KEY, QUOTA_KEY, ACCOUNT_KEY,
+    PROVIDERS, DEFAULT_PROVIDER, COMPATIBLE_PRESETS, DEVICE_TOKEN_KEY, QUOTA_KEY, QUOTA_INFO_KEY,
+    PAIRING_KEY, ACCOUNT_KEY,
     ATHLETE_ID_KEY,
     providerFor, presetFor, costFor, streamCompletion, tokenKind
 } from './providers.mjs';
@@ -1557,6 +1558,12 @@ async function callClaudeAPI(systemPrompt, userPrompt) {
             const left = response.headers.get('X-Lunatic-Quota-Remaining');
             if (left !== null && left !== '') {
                 common.settingsStore.set(QUOTA_KEY, Number(left));
+                // Keep the limit/resetsAt beside it rather than letting the two
+                // keys drift: quotaInfo() prefers this number over the object's.
+                const info = common.settingsStore.get(QUOTA_INFO_KEY);
+                if (info && typeof info === 'object') {
+                    common.settingsStore.set(QUOTA_INFO_KEY, { ...info, remaining: Number(left) });
+                }
             }
         },
 
@@ -1632,6 +1639,74 @@ function updateCost(providerId, model, inputTokens, outputTokens) {
 // Render the shared cost/call counters into whichever elements exist in the
 // current window (main window: #session-cost; settings window: #session-cost-display
 // and #total-calls-display).
+/**
+ * The allowance as last reported, or null.
+ *
+ * The bare QUOTA_KEY number is the legacy shape and still the fallback: it is
+ * what a downgrade reads, and what the streaming response header updates
+ * mid-ride before the settings window has refreshed anything.
+ */
+function quotaInfo() {
+    const info = common.settingsStore.get(QUOTA_INFO_KEY);
+    const bare = common.settingsStore.get(QUOTA_KEY);
+    if (info && typeof info === 'object' && typeof info.remaining === 'number') {
+        // The header write is more recent than the last /v1/quota answer.
+        return typeof bare === 'number' ? { ...info, remaining: bare } : info;
+    }
+    if (typeof bare === 'number') return { remaining: bare, limit: null, resetsAt: null, tier: null };
+    return null;
+}
+
+/** Repaint the hosted quota line from whatever is stored. */
+function renderHostedQuota() {
+    const el = document.getElementById('hosted-quota');
+    if (!el) return;
+    const said = quotaSentence();
+    el.textContent = said.text;
+    el.className = said.level ? `help-text ${said.level}` : 'help-text';
+}
+
+/** "1 October", from the ISO date the service sends. */
+function resetDate(iso) {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
+}
+
+/**
+ * What to say about the allowance, in one place, because the settings window
+ * and the overlay used to say different things at the same moment.
+ *
+ * Out of calls is the state a free rider spends most of the month in -- the
+ * anonymous allowance is about one racing hour -- and it used to render
+ * identically to a healthy one: "Connected", a green box, and a grey line of
+ * help text reading "0 of 150". Every call was failing and nothing said so.
+ */
+function quotaSentence(q = quotaInfo()) {
+    if (!q || typeof q.remaining !== 'number') return { text: '', level: '' };
+    const { remaining, limit, tier } = q;
+    const when = resetDate(q.resetsAt);
+    const resets = when ? ` — resets ${when}` : '';
+    // Keep this aligned with the service's own refusal text (quota.mjs), or the
+    // two windows tell a rider to do different things.
+    const remedy = tier === 'account'
+        ? ' Use your own API key on the AI Provider tab to keep going.'
+        : ' Sign in with Discord for a bigger allowance, or use your own API key.';
+
+    if (remaining <= 0) {
+        return { text: `0 of ${limit ?? '?'} free calls left${resets}.${remedy}`, level: 'error' };
+    }
+    const low = limit ? remaining <= Math.max(5, Math.ceil(limit * 0.1)) : remaining <= 10;
+    if (low) {
+        return {
+            text: `${remaining} of ${limit ?? '?'} free calls left${resets}.${remedy}`,
+            level: 'warn'
+        };
+    }
+    return { text: `${remaining} of ${limit ?? '?'} free calls left this month`, level: '' };
+}
+
 function renderCost() {
     const calls = common.settingsStore.get(CALLS_KEY) || 0;
     const el = document.getElementById('session-cost');
@@ -1643,27 +1718,70 @@ function renderCost() {
     const callsEl = document.getElementById('total-calls-display');
     if (callsEl) callsEl.textContent = String(calls);
 
+    // The Cost Tracking card is hidden on hosted. One allowance rendered twice
+    // from two sources drifts, and it did: a boot refresh updated the sentence
+    // and left "137 left" behind, a ride updated the row and left the sentence.
+    // "137 left" was also neither a cost nor per-session, and the button under
+    // it said Reset Session Cost while leaving it untouched.
+    const costSection = document.getElementById('cost-section');
     if (activeProviderId() === 'hosted') {
-        const left = common.settingsStore.get(QUOTA_KEY);
-        const label = (left === null || left === undefined) ? '—' : `${left} left`;
-        const detail = (left === null || left === undefined)
+        const q = quotaInfo();
+        const left = q?.remaining;
+        const detail = (typeof left !== 'number')
             ? 'Free calls remaining: unknown until the next call'
-            : `${left} free calls left this month · ${calls} calls this session`;
+            : `${quotaSentence(q).text} · ${calls} calls this session`;
         if (el) { el.textContent = '$'; el.title = detail; el.classList.add('free'); }
-        if (inline) { inline.textContent = label; inline.title = detail; }
+        if (costSection) costSection.hidden = true;
         return;
     }
+    if (costSection) costSection.hidden = false;
 
     const cost = common.settingsStore.get(COST_KEY) || 0;
     const tracked = currentCostIsTracked();
-    const money = `$${cost < 1 ? cost.toFixed(4) : cost.toFixed(2)}${tracked ? '' : '*'}`;
+    // The overlay's readout is always a bare "$" with the figure in its
+    // tooltip; only the settings window prints the value inline.
+    if (el) { el.textContent = '$'; el.classList.remove('free'); }
+
+    // "$0.0000*" under a heading called Cost Tracking reads as free, and the
+    // asterisk was decoded only in a hover tooltip. Every OpenAI-compatible
+    // model is untracked by default, because the rate fields start blank.
+    if (!tracked && cost === 0) {
+        const detail = 'Not tracked — this model has no known price. Enter the $/1M rates on ' +
+            'the AI Provider tab to see a figure.';
+        if (el) el.title = detail;
+        if (inline) {
+            inline.textContent = '';
+            inline.title = '';
+            inline.append(document.createTextNode('not tracked — '));
+            const link = document.createElement('a');
+            link.href = '#';
+            link.textContent = 'enter $/1M rates';
+            link.addEventListener('click', ev => {
+                ev.preventDefault();
+                const rate = document.querySelector('input[name="compatInputCost"]');
+                rate?.focus();
+                rate?.scrollIntoView?.({ block: 'center' });
+            });
+            inline.append(link);
+            inline.append(document.createTextNode(' to see it'));
+        }
+        return;
+    }
+
+    const money = `$${cost < 1 ? cost.toFixed(4) : cost.toFixed(2)}`;
+    // sessionCost survives a provider switch, so an untracked run after a
+    // tracked one really is "at least" -- the unpriced calls are missing.
+    const label = tracked ? money : `at least ${money}`;
     const detail = tracked
         ? `${money} this session · ${calls} calls`
-        : `${money} this session · ${calls} calls — the asterisk means at least this much: ` +
-          'the selected model has no known price. Enter one in settings to track it.';
+        : `At least ${money} this session · ${calls} calls — some were made on a model with no ` +
+          'known price. Enter the $/1M rates on the AI Provider tab to track them.';
 
-    if (el) { el.textContent = '$'; el.title = detail; el.classList.remove('free'); }
-    if (inline) { inline.textContent = money; inline.title = tracked ? '' : detail; }
+    if (el) el.title = detail;
+    if (inline) {
+        inline.textContent = tracked ? label : `${label} (some calls unpriced)`;
+        inline.title = tracked ? '' : detail;
+    }
 }
 
 function escapeHtml(s) {
@@ -1816,6 +1934,13 @@ export async function lunaticAnnouncerSettingsMain() {
     renderCost();
     common.settingsStore.addEventListener('set', ev => {
         if (ev.data.key === COST_KEY || ev.data.key === CALLS_KEY) renderCost();
+        // Spending during a ride changes the allowance under this window. It
+        // used to sit on whatever the last open had fetched.
+        if (ev.data.key === QUOTA_KEY || ev.data.key === QUOTA_INFO_KEY) {
+            renderCost();
+            renderHostedQuota();
+            updateApiInfo();
+        }
         // GOTTA.BIKE Sauce importing while this window is open.
         if (ev.data.key === ATHLETE_DATA_KEY) {
             storedAthleteData = ev.data.value || {};
@@ -1847,6 +1972,9 @@ export async function lunaticAnnouncerSettingsMain() {
         // updateApiInfo(): repainting must not downgrade a box that a passing
         // test earned, and muting says nothing about the provider settings.
         if (changed.has('ttsEnabled')) renderApiInfo();
+        // "$0.0000*" until the next call, while the rider looks at the rates
+        // they just typed on this very page.
+        if (changed.has('compatInputCost') || changed.has('compatOutputCost')) renderCost();
     });
 
     // Initial visibility
@@ -2102,6 +2230,14 @@ function renderApiInfo() {
     if (!configured) {
         state = 'unconfigured';
         text = 'Not configured — pick Lunatic hosted for free commentary, or paste an API key.';
+    } else if (providerId === 'hosted' && quotaInfo()?.remaining <= 0) {
+        // Ahead of the test outcome on purpose. Green "Configured" over an
+        // allowance that refuses every call was the worst lie on the tab: it is
+        // the state a free rider is in for most of the month, while the overlay
+        // was already saying "Monthly limit reached".
+        state = 'exhausted';
+        const when = resetDate(quotaInfo()?.resetsAt);
+        text = when ? `Out of free calls until ${when}` : 'Out of free calls';
     } else if (apiTestOutcome === 'ok') {
         state = 'connected';
         text = 'Connected';
@@ -2131,6 +2267,10 @@ function renderApiInfo() {
     }
     // The one thing a first-run rider needs to be told, at the moment it is true.
     if (nextStep) {
+        // Not shown when exhausted: the Status line above already says "Out of
+        // free calls until 1 October" and the allowance line directly above the
+        // box carries the count and the remedy. Repeating the sentence inside
+        // the box is the same duplication F17 was about.
         nextStep.hidden = state !== 'connected';
         if (state === 'connected') {
             // Speech is ON by default, so the thing to say first is that it
@@ -2262,9 +2402,14 @@ function setupHostedControls() {
     const signInBtn = document.getElementById('hosted-signin-btn');
     const signOutBtn = document.getElementById('hosted-signout-btn');
     const linkEl = document.getElementById('hosted-signin-link');
+    const hintEl = document.getElementById('hosted-signin-hint');
+    const cancelBtn = document.getElementById('hosted-cancel-btn');
+    const pasteInput = document.getElementById('hosted-paste-key');
+    const pasteBtn = document.getElementById('hosted-paste-btn');
     const badgeEl = document.getElementById('hosted-conn-badge');
     const connTextEl = document.getElementById('hosted-conn-text');
     let signingIn = false;
+    let pairingAbort = null;
 
     if (!connectBtn && !modelSel) return;   // not the settings window
 
@@ -2275,12 +2420,37 @@ function setupHostedControls() {
         }
     };
 
+    /**
+     * Show that a sign-in is in flight, or that it is not.
+     *
+     * Only the sign-in button used to be disabled. A rider who gave up on the
+     * browser pressed the still-live "Connect anonymously", got a working
+     * connection, a greyed button with no explanation for up to fifteen
+     * minutes, a lingering "Open the sign-in page" link, and then a red
+     * "Timed out" on a connection that was fine. Disabled grey beside live blue
+     * actively steers them there.
+     */
+    function setPending(on) {
+        signingIn = on;
+        if (signInBtn) signInBtn.hidden = on;
+        if (connectBtn) connectBtn.disabled = on;
+        if (cancelBtn) cancelBtn.hidden = !on;
+        if (hintEl) hintEl.hidden = !on;
+        if (!on && linkEl) linkEl.hidden = true;
+    }
+
+    /** Forget an in-flight pairing: cancelled, finished, or expired. */
+    function clearPairing() {
+        common.settingsStore.set(PAIRING_KEY, null);
+    }
+
     signOutBtn?.addEventListener('click', () => {
         // Local only. The account and its key live on the server; signing in
         // again returns the same one, so this cannot orphan an allowance.
         common.settingsStore.set(DEVICE_TOKEN_KEY, '');
         common.settingsStore.set(ACCOUNT_KEY, null);
         common.settingsStore.set(QUOTA_KEY, null);
+        common.settingsStore.set(QUOTA_INFO_KEY, null);
         setStatus('Signed out', '');
         if (linkEl) linkEl.hidden = true;
         renderConnection();
@@ -2357,11 +2527,33 @@ function setupHostedControls() {
         const athleteId = common.settingsStore.get(ATHLETE_ID_KEY);
         const wrongBucket = athleteId && typeof quota.bucket === 'string' &&
             quota.bucket.startsWith('d:');
-        if (!wrongBucket) common.settingsStore.set(QUOTA_KEY, quota.remaining);
+        if (!wrongBucket) {
+            common.settingsStore.set(QUOTA_KEY, quota.remaining);
+            // resetsAt and tier were both being thrown away, which is why the
+            // window could not say when the allowance came back or which one
+            // the rider was on. The service has always sent them.
+            common.settingsStore.set(QUOTA_INFO_KEY, {
+                remaining: quota.remaining,
+                limit: quota.limit ?? null,
+                resetsAt: quota.resetsAt ?? null,
+                tier: quota.tier ?? null,
+                fetchedAt: Date.now()
+            });
+        }
         if (quotaEl) {
-            quotaEl.textContent = wrongBucket
-                ? `${quota.remaining} of ${quota.limit} free calls left for this install`
-                : `${quota.remaining} of ${quota.limit} free calls left this month`;
+            if (wrongBucket) {
+                quotaEl.textContent =
+                    `${quota.remaining} of ${quota.limit} free calls left for this install`;
+                quotaEl.className = 'help-text';
+            } else {
+                const said = quotaSentence({
+                    remaining: quota.remaining, limit: quota.limit,
+                    resetsAt: quota.resetsAt, tier: quota.tier
+                });
+                quotaEl.textContent = said.text;
+                // Grey help text at zero is why every call failing looked fine.
+                quotaEl.className = said.level ? `help-text ${said.level}` : 'help-text';
+            }
         }
         // The service is the authority on who the key belongs to; the stored
         // label is only a fallback for an offline settings window.
@@ -2394,40 +2586,113 @@ function setupHostedControls() {
         try { window.open(start.verifyUrl, '_blank'); } catch (e) { /* link is the fallback */ }
 
         const deadline = Date.now() + Math.min(Number(start.expiresIn) || 900, 900) * 1000;
+        // Persisted, so closing this window mid-OAuth does not strand a pairing
+        // that completes on the server with nobody to collect it. The browser
+        // said "Your announcer is connected" and the mod said NOT CONNECTED.
+        common.settingsStore.set(PAIRING_KEY, { pollToken: start.pollToken, deadline });
+        return pollPairing(start.pollToken, deadline);
+    }
+
+/** A sleep that Cancel can cut short, rather than one it waits out. */
+    function sleep(ms, signal) {
+        return new Promise((resolve, reject) => {
+            if (signal?.aborted) return reject(new DOMException('cancelled', 'AbortError'));
+            const t = setTimeout(resolve, ms);
+            signal?.addEventListener('abort', () => {
+                clearTimeout(t);
+                reject(new DOMException('cancelled', 'AbortError'));
+            }, { once: true });
+        });
+    }
+
+    /** Poll until the browser half finishes, the deadline passes, or Cancel. */
+    async function pollPairing(pollToken, deadline) {
         while (Date.now() < deadline) {
-            await new Promise(r => setTimeout(r, 2000));
+            await sleep(2000, pairingAbort?.signal);
+            if (pairingAbort?.signal.aborted) throw new DOMException('cancelled', 'AbortError');
             const res = await getJson('/v1/pair/poll', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pollToken: start.pollToken })
+                body: JSON.stringify({ pollToken }),
+                signal: pairingAbort?.signal
             });
-            if (res.status === 'complete') return res;
+            if (res.status === 'complete') { clearPairing(); return res; }
             if (res.status !== 'pending') {
+                clearPairing();
                 throw new Error('That sign-in link expired. Try again.');
             }
         }
+        clearPairing();
         throw new Error('Timed out waiting for the sign-in to finish.');
     }
 
-    signInBtn?.addEventListener('click', async () => {
+    /** Store a key the flow produced, or one the rider pasted. */
+    async function adoptKey(key, name) {
+        common.settingsStore.set(DEVICE_TOKEN_KEY, key);
+        if (name) common.settingsStore.set(ACCOUNT_KEY, { name });
+        await refresh();
+    }
+
+    /** Drive a pairing to its end, from a fresh start or a resumed one. */
+    async function runPairing(run) {
         if (signingIn) return;              // one flow at a time
-        signingIn = true;
-        signInBtn.disabled = true;
+        pairingAbort = new AbortController();
+        setPending(true);
         setStatus('Waiting for Discord…', 'loading');
         try {
-            if (baseInput) common.settingsStore.set('hostedBaseUrl', serviceUrl());
-            const { key, account } = await signIn();
-            common.settingsStore.set(DEVICE_TOKEN_KEY, key);
-            common.settingsStore.set(ACCOUNT_KEY, { name: account?.username || 'Discord user' });
-            if (linkEl) linkEl.hidden = true;
-            await refresh();
-            setStatus(`Signed in as ${account?.username || 'Discord user'}`, 'success');
-            updateApiInfo(true);
+            const { key, account } = await run();
+            const name = account?.username || 'Discord user';
+            await adoptKey(key, name);
+            const q = quotaInfo();
+            if (q && q.remaining <= 0) setConnectedStatus();
+            else { setStatus(`Signed in as ${name}`, 'success'); updateApiInfo(true); }
         } catch (err) {
-            setStatus(err.message || 'Sign-in failed', 'error');
+            if (err?.name === 'AbortError') setStatus('Sign-in cancelled', '');
+            else setStatus(err.message || 'Sign-in failed', 'error');
         } finally {
-            signingIn = false;
-            signInBtn.disabled = false;
+            setPending(false);
+            pairingAbort = null;
+            renderConnection();
+        }
+    }
+
+    signInBtn?.addEventListener('click', () => {
+        if (baseInput) common.settingsStore.set('hostedBaseUrl', serviceUrl());
+        runPairing(signIn);
+    });
+
+    cancelBtn?.addEventListener('click', () => {
+        pairingAbort?.abort();
+        clearPairing();
+    });
+
+    pasteBtn?.addEventListener('click', async () => {
+        const key = (pasteInput?.value || '').trim();
+        // NOT tokenKind(): that classifies a token the mod already holds (anon
+        // vs Discord) and calls any non-empty string 'anon', so it validates
+        // nothing. The service mints `lun_…` for a device and `luna_…` for an
+        // account — and `luna_` does NOT start with `lun_`, since the fourth
+        // character differs. Both, explicitly.
+        if (!key.startsWith('lun_') && !key.startsWith('luna_')) {
+            setStatus('That does not look like a key from this service — they start with ' +
+                '"lun_" or "luna_".', 'error');
+            return;
+        }
+        pasteBtn.disabled = true;
+        setStatus('Checking that key…', 'loading');
+        try {
+            if (baseInput) common.settingsStore.set('hostedBaseUrl', serviceUrl());
+            await adoptKey(key, null);
+            if (pasteInput) pasteInput.value = '';
+            clearPairing();
+            setConnectedStatus();
+        } catch (err) {
+            // Do not leave a key the service rejected sitting in storage.
+            common.settingsStore.set(DEVICE_TOKEN_KEY, '');
+            setStatus(err.message || 'The service did not accept that key', 'error');
+        } finally {
+            pasteBtn.disabled = false;
+            renderConnection();
         }
     });
 
@@ -2455,8 +2720,11 @@ function setupHostedControls() {
             }
 
             await refresh();
-            setStatus('Connected', 'success');
-            updateApiInfo(true);
+            // A rider who gave up on the browser and connected anonymously
+            // should not be left with a live "Open the sign-in page" link.
+            if (linkEl) linkEl.hidden = true;
+            clearPairing();
+            setConnectedStatus();
         } catch (err) {
             setStatus(err.message || 'Could not reach the service', 'error');
         } finally {
@@ -2469,9 +2737,33 @@ function setupHostedControls() {
         updateApiInfo();
     });
 
+    /** "Connected", or the truth when the allowance is gone. */
+    function setConnectedStatus() {
+        const q = quotaInfo();
+        if (q && q.remaining <= 0) {
+            const when = resetDate(q.resetsAt);
+            setStatus(when ? `Out of free calls until ${when}` : 'Out of free calls', 'error');
+        } else {
+            setStatus('Connected', 'success');
+        }
+        updateApiInfo(true);
+    }
+
+    // A sign-in the rider walked away from. The browser takes the screen over
+    // Zwift, so closing this window mid-OAuth is an ordinary thing to do -- and
+    // it used to strand a pairing that had completed on the server, leaving the
+    // browser saying connected and the mod saying not, with a second full OAuth
+    // round as the only way back.
+    const pending = common.settingsStore.get(PAIRING_KEY);
+    if (pending?.pollToken && Number(pending.deadline) > Date.now()) {
+        runPairing(() => pollPairing(pending.pollToken, Number(pending.deadline)));
+    } else if (pending) {
+        clearPairing();
+    }
+
     // Already set up? Refresh quietly on open so the allowance is current.
     if (activeProviderId() === 'hosted' && isProviderConfigured()) {
-        refresh().then(() => { setStatus('Connected', 'success'); updateApiInfo(true); })
+        refresh().then(setConnectedStatus)
                  .catch(err => setStatus(err.message || 'Service unreachable', 'error'));
     }
 }

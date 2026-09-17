@@ -33,6 +33,14 @@ export const DEFAULT_PROVIDER = 'anthropic';
 // settings window share one device token rather than minting two.
 export const DEVICE_TOKEN_KEY = '/gotta-bike-lunatic-device-token';
 export const QUOTA_KEY = '/gotta-bike-lunatic-quota';
+// The whole answer: { remaining, limit, resetsAt, tier, fetchedAt }. QUOTA_KEY
+// stays the bare number beside it, because a downgrade reads that and would
+// print "[object Object] left" for an object. Both are written in one place.
+export const QUOTA_INFO_KEY = '/gotta-bike-lunatic-quota-info';
+// A Discord sign-in in flight: { pollToken, deadline }. Global and persisted,
+// NOT sessionStorage: the failure it exists for is the rider closing the
+// settings window mid-OAuth, which is exactly when sessionStorage is discarded.
+export const PAIRING_KEY = '/gotta-bike-lunatic-pairing';
 
 /**
  * The Zwift athlete id the overlay last watched, written for the settings

@@ -285,13 +285,34 @@
                 <div class="api-actions" data-provider="hosted">
                     <button type="button" id="hosted-signin-btn">Sign in with Discord</button>
                     <button type="button" id="hosted-connect-btn">Connect anonymously</button>
+                    <!-- Shown only while a sign-in is in flight. Without it the
+                         only exits were a 15-minute timeout or closing the
+                         window, which loses the pairing. -->
+                    <button type="button" id="hosted-cancel-btn" hidden>Cancel</button>
                     <button type="button" id="hosted-signout-btn">Sign out</button>
                     <span id="hosted-status"></span>
                 </div>
 
                 <p class="help-text" data-provider="hosted">
                     <a id="hosted-signin-link" href="#" target="_blank" rel="noopener" hidden></a>
+                    <span id="hosted-signin-hint" hidden>Keep this window open &mdash; the sign-in
+                        finishes here, usually within a few seconds of the browser saying done.</span>
                 </p>
+
+                <!-- The service's sign-in page tells a rider to paste their key
+                     in when the mod did not pick it up. Until now there was no
+                     field to paste it into. -->
+                <details class="paste-key" data-provider="hosted">
+                    <summary>Have a key already? Paste it</summary>
+                    <label>
+                        <key>Key:</key>
+                        <input type="text" id="hosted-paste-key" placeholder="luna_&hellip;"
+                               autocomplete="off" style="--size: 30"/>
+                        <button type="button" id="hosted-paste-btn">Use this key</button>
+                    </label>
+                    <p class="help-text">From the sign-in page in your browser, if the mod did not
+                        collect it automatically.</p>
+                </details>
 
                 <p class="help-text" data-provider="hosted">
                     <span id="hosted-quota"></span>
@@ -327,7 +348,7 @@
                     A prompt you wrote is not used here &mdash; use your own API key to hear it.</p>
             </section>
 
-            <section class="settings-section">
+            <section class="settings-section" id="cost-section">
                 <h2>Cost Tracking</h2>
                 <div class="cost-info">
                     <div class="cost-row">

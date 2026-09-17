@@ -145,6 +145,25 @@ Both HTML files import the same module and call different entry points:
   Only the overlay subscribes to `nearby`, so it publishes the id to
   `ATHLETE_ID_KEY` and `authHeader()` reads it. `/v1/quota` echoes `bucket` so the
   client can refuse to overwrite the shared `QUOTA_KEY` from the wrong one.
+- **The allowance is said in one place, `quotaSentence()`, and stored whole.** `/v1/quota` has
+  always returned `resetsAt` and `tier`; the client threw both away, so it could not say when the
+  calls came back or which allowance a rider was on. `QUOTA_INFO_KEY` holds the object and
+  `QUOTA_KEY` stays the bare number beside it, because a downgrade reads that one. `renderCost()`
+  hides the Cost Tracking card on hosted: one allowance rendered twice from two sources drifts, and
+  it did.
+- **Out of free calls is a first-class state, not a shade of Connected.** `renderApiInfo()` has an
+  `exhausted` branch *ahead* of the test outcome, because a green "Configured" over an allowance
+  that refuses every call is the state a free rider is in for most of the month — roughly 150 calls
+  is one racing hour. Keep the wording in step with `service/src/quota.mjs`'s refusal text, or the
+  two windows tell a rider to do different things.
+- **A Discord sign-in in flight is persisted to `PAIRING_KEY`, not to `sessionStorage`.** The
+  failure it exists for is the rider closing the settings window mid-OAuth — which is exactly when
+  `sessionStorage` is discarded. While pending, Sign in is hidden, Cancel appears and
+  **`connectBtn.disabled = true`**: a live "Connect anonymously" beside a greyed Sign in steered
+  riders into a working connection that then reported "Timed out" fifteen minutes later.
+- **`tokenKind()` classifies a token, it does not validate one** — it calls any non-empty string
+  `'anon'`. The paste field checks the prefixes itself, and checks **both**: the service mints
+  `lun_…` for a device and `luna_…` for an account, and `luna_` does *not* start with `lun_`.
 - **A checkbox on the Data Fields tab must be read by `riderLine()`.** Six of nineteen were read
   by nothing at all, for as long as the tab existed, because a box that saves looks exactly like a
   box that works. `scripts/data-fields-test.mjs` reads the tab's `name=` attributes out of the HTML
@@ -237,6 +256,9 @@ Both HTML files import the same module and call different entry points:
 'promptUpdateNotice'                 // per-window: the undismissed "voices updated" line
 'settingsTab'                        // per-window: the tab the settings window last showed
 '/gotta-bike-lunatic-athlete-id'     // the overlay's watched athlete; the settings window's bucket
+'/gotta-bike-lunatic-quota'          // the bare remaining count; what a downgrade reads
+'/gotta-bike-lunatic-quota-info'     // { remaining, limit, resetsAt, tier, fetchedAt }
+'/gotta-bike-lunatic-pairing'        // a Discord sign-in in flight: { pollToken, deadline }
 '/gotta-bike-sauce-athlete-data'     // READ-ONLY, written by GOTTA.BIKE sauce
 'lunatic-announcer-settings-v1'      // per-window bag (data-settings-key)
 ```
