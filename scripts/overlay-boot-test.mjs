@@ -16,11 +16,11 @@
  *   node scripts/overlay-boot-test.mjs
  */
 import {
-    installGlobals, loadAnnouncer, el, check, section, finish, bailOnBootFailure
+    installGlobals, loadAnnouncer, el, fire, check, section, finish, bailOnBootFailure
 } from './lib/stub-dom.mjs';
 
 installGlobals();
-const { mod, common: { settingsStore, subscribed } } = await loadAnnouncer();
+const { mod, common: { settingsStore, subscribed, rpcCalls, rpcResults } } = await loadAnnouncer();
 
 section('the overlay boots at all');
 let bootErr = null;
@@ -328,6 +328,106 @@ section('F11-F16: what the Data Fields tab actually puts on the wire');
 
     globalThis.fetch = realFetch;
     console.error = realError;
+}
+
+// Posting into Zwift chat is the only output that leaves the rider's own
+// screen: a global message goes to everyone riding near them. Every assertion
+// here is about NOT sending one.
+// Posting into Zwift chat is the only output that leaves the rider's own
+// screen: a global message goes to everyone riding near them. Most of what is
+// asserted here is that nothing is sent.
+section('Zwift chat: nothing is posted unless it was asked for');
+{
+    const chatBtn = el('chat-btn');
+    const posts = () => rpcCalls.filter(c => c.name === 'chatMessage');
+    const toastText = () => el('error-toast').querySelector('.error-message').textContent || '';
+    const shown = () => el('current-commentary').querySelector('.commentary-text').innerHTML;
+
+    // A real line has to exist for there to be anything to post, and only a
+    // successful generation puts one in the history. Serve one, as Anthropic's
+    // SSE, through the real streaming shell. The text has to differ every time:
+    // isRepetitive() drops a line that restates the last few, which is a
+    // feature and would otherwise silently empty this test.
+    const realFetch = globalThis.fetch;
+    const realError = console.error;
+    const realInfo = console.info;
+    const sse = lines => new ReadableStream({
+        start(c) {
+            for (const l of lines) c.enqueue(new TextEncoder().encode(l));
+            c.close();
+        }
+    });
+    const speakOnce = async text => {
+        globalThis.fetch = async () => ({
+            ok: true, status: 200, headers: { get: () => null },
+            body: sse([
+                'event: content_block_delta\ndata: ' +
+                JSON.stringify({ type: 'content_block_delta',
+                                 delta: { type: 'text_delta', text } }) + '\n\n',
+                'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+            ])
+        });
+        console.error = () => {};
+        console.info = () => {};
+        nearby([]);            // rearm the first-data fire
+        nearby(pack);
+        for (let i = 0; i < 8; i++) await new Promise(r => setImmediate(r));
+        globalThis.fetch = realFetch;
+        console.error = realError;
+        console.info = realInfo;
+    };
+
+    settingsStore.set('claudeApiKey', 'sk-ant-api03-chat-key');
+    await speakOnce('Cox launches, and the group cannot hold him.');
+    check('a line exists to post', /cannot hold him/.test(shown()), shown().slice(0, 80));
+    check('and nothing was posted while the setting is off',
+        posts().length === 0, `${posts().length} post(s)`);
+    check('the button is hidden too', chatBtn.hidden === true);
+
+    settingsStore.set('zwiftChat', 'manual');
+    check('switching it on shows the button', chatBtn.hidden === false);
+
+    // Game Connection is a Sauce-wide setting this mod cannot turn on, so the
+    // state has to be reported rather than assumed.
+    const status = subscribed.get('gameConnection:status');
+    check('it listens for the game connection', typeof status === 'function');
+    fire(chatBtn, 'click');
+    await new Promise(r => setImmediate(r));
+    check('a click with no game connection posts nothing', posts().length === 0,
+        `${posts().length} post(s)`);
+    check('and says what is missing', /Game Connection/.test(toastText()), toastText());
+
+    status({ connected: true, state: 'connected' });
+    check('once connected the button is live', !chatBtn._classes.has('unavailable'));
+
+    // --- auto, before anything has posted, so the floor starts clean --------
+    settingsStore.set('zwiftChat', 'auto');
+    await speakOnce('Vasquez has forty seconds and the gap is still growing.');
+    check('in auto a new line posts itself', posts().length === 1, `${posts().length} post(s)`);
+    check('sending the line, trimmed for a chat bubble',
+        /forty seconds/.test(String(posts().at(-1).args[0])) &&
+        String(posts().at(-1).args[0]).length <= 240, String(posts().at(-1).args[0]));
+    check('globally, with no direct-message target',
+        posts().at(-1).args[1] === undefined, JSON.stringify(posts().at(-1).args[1]));
+
+    // The announcer can fire eight times a minute. Chat must not.
+    await speakOnce('Bianco is losing contact at the back of the group.');
+    await speakOnce('Porras closes to within two seconds of the leaders.');
+    check('the next two are held back by the 30s floor', posts().length === 1,
+        `${posts().length} post(s)`);
+
+    // A press is explicit, so it is not rate-limited.
+    fire(chatBtn, 'click');
+    await new Promise(r => setImmediate(r));
+    check('but pressing the button still posts', posts().length === 2, `${posts().length} post(s)`);
+
+    settingsStore.set('zwiftChat', 'off');
+    check('switched off, the button goes away', chatBtn.hidden === true);
+    await speakOnce('Hanson has been caught by the chasing group.');
+    fire(chatBtn, 'click');
+    await new Promise(r => setImmediate(r));
+    check('and neither a new line nor a click posts anything', posts().length === 2,
+        `${posts().length} post(s)`);
 }
 
 const watchChange = subscribed.get('watching-athlete-change');

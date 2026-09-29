@@ -174,6 +174,19 @@ Both HTML files import the same module and call different entry points:
   independent-looking checkboxes that were really one else-if. W/kg is the 5-second average over a
   weight, so it goes only with `'smooth5'`; `sendPower60s` is a separate, additive box, which is why
   the select is labelled *Current power*.
+- **Posting to Zwift chat is OFF by default, and everything about it assumes that.** It is the
+  only output that leaves the rider's own screen: `rpc.chatMessage` sends a GLOBAL message to
+  everyone riding near them. `zwiftChat` is `'off' | 'manual' | 'auto'`; `'auto'` carries a 30s
+  floor (`CHAT_AUTO_FLOOR_MS`) because the cadence alone allows eight calls a minute, a manual
+  press bypasses the floor but a manual post still resets it, and every line is trimmed to
+  `CHAT_MAX_CHARS` because Zwift renders chat as a bubble over a rider's head. Auto posts only
+  after a line is COMPLETE — a half-streamed sentence must not go to other people.
+- **Game Connection is Sauce's setting, not ours: report it, never assume it.**
+  `rpc.getGameConnectionStatus()` is registered unconditionally and answers
+  `{connected:false, state:'disabled'}` when it is off, so it is always safe to call;
+  `subscribe('status', fn, {source: 'gameConnection'})` is how the state changes arrive. Turning it
+  on takes the single Companion App slot, so the settings window says so rather than just asking
+  for it. `chatMessage` itself is only registered when Game Connection is running.
 - **Speech is ON by default and the mod is not Mac-only.** `ttsEnabled` defaults true — the one-line
   description is "spoken aloud", and the speaker button in the overlay titlebar is the one-click
   mute. `listVoices()` prefers English but falls back to *every* voice when there is none: the
@@ -253,6 +266,7 @@ Both HTML files import the same module and call different entry points:
 'promptLibraryMigrated'              // per-window: prompt migrations ran
 'builtinPrompts'                     // per-window: voices fetched from the service
 'promptUpdates'                      // per-window: 'auto' (default) | 'off'
+'zwiftChat'                          // per-window: 'off' (default) | 'manual' | 'auto'
 'promptUpdateNotice'                 // per-window: the undismissed "voices updated" line
 'settingsTab'                        // per-window: the tab the settings window last showed
 '/gotta-bike-lunatic-athlete-id'     // the overlay's watched athlete; the settings window's bucket

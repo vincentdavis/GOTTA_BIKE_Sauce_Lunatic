@@ -61,7 +61,7 @@ const server = createServer((req, res) => {
 await new Promise(r => server.listen(PORT, '127.0.0.1', r));
 
 const GLYPHS = { close: '✕', volume_up: '🔊', volume_off: '🔇', settings: '⚙',
-                 refresh: '↻', pause: '⏸', play_arrow: '▶', content_copy: '⧉' };
+                 refresh: '↻', pause: '⏸', play_arrow: '▶', content_copy: '⧉', forum: '💬' };
 
 const LINES = [
     ["Cox launches out of the group with a huge dig, seven point six watts per kilo, and Jang simply can't go with it, brought straight back into the fold behind, while Bayer slips further away now, over two minutes lost.", '6:45:48 PM'],
@@ -79,7 +79,9 @@ const STATES = [
       note: 'Roughly the size in the bug report. Every spare pixel used to go between the current line and the history.' },
     { name: '03-one-line-only', w: 420, h: 340, lines: 1, note: 'Before any history exists.' },
     { name: '04-history-off', w: 420, h: 340, lines: 4, historyOff: true },
-    { name: '05-narrow-tall', w: 380, h: 600, lines: 4 }
+    { name: '05-narrow-tall', w: 380, h: 600, lines: 4 },
+    { name: '06-chat-button', w: 420, h: 340, lines: 2, chat: 'manual',
+      note: 'Posting to Zwift chat switched on: the extra titlebar button.' }
 ];
 
 mkdirSync(OUT, { recursive: true });
@@ -99,7 +101,8 @@ for (const st of STATES) {
     const errors = [];
     page.on('pageerror', e => errors.push(String(e)));
     await page.addInitScript(seed => { window.__SEED = seed; },
-        { aiProvider: 'anthropic', claudeApiKey: 'sk-ant-api03-EXAMPLE', backgroundOption: 'black' });
+        { aiProvider: 'anthropic', claudeApiKey: 'sk-ant-api03-EXAMPLE', backgroundOption: 'black',
+          zwiftChat: st.chat || 'off' });
     await page.goto(`${BASE}/pages/announcer.html`);
     await page.waitForTimeout(500);
     await page.evaluate(g => { for (const el of document.querySelectorAll('ms')) el.textContent = g[el.textContent.trim()] || '▪'; }, GLYPHS);

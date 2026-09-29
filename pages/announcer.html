@@ -18,6 +18,10 @@
                 <div id="mute-btn" class="button" title="Speak commentary aloud"><ms>volume_off</ms></div>
                 <div id="pause-btn" class="button" title="Pause auto-updates"><ms>pause</ms></div>
                 <div id="copy-btn" class="button" title="Copy commentary to clipboard"><ms>content_copy</ms></div>
+                <!-- Hidden unless Zwift chat posting is switched on. Posting
+                     goes to everyone around you, so it is never a stray click
+                     away by default. -->
+                <div id="chat-btn" class="button" title="Post this line to Zwift chat" hidden><ms>forum</ms></div>
                 <a class="button open-settings" href="announcer-settings.html?width=700&height=600&child-window"
                    title="Open settings window" target="lunatic-announcer-settings"><ms>settings</ms></a>
                 <div title="Close this window" class="button close electron-only"><ms>close</ms></div>

@@ -20,6 +20,8 @@ a one-line race call. Lines fire when something happens, not on a timer.
 - **Spoken aloud, on by default.** Sentences are spoken as they stream in, so audio
   starts at the first sentence. Uses the voices built into your computer, on macOS
   and Windows alike — no extra API, no round trip.
+- **Post to Zwift chat.** Optional and off by default: send a line into the game's
+  own chat, either on a button press or automatically. Needs Sauce's Game Connection.
 - **Race aware.** Distance to go, your placing, gradient, route and event name.
 - **Storyline memory.** An attack is remembered, so the catch two minutes later
   gets a callback.
@@ -65,6 +67,7 @@ rate of riders around you are sent to whichever service you choose.
 | ▮▮ | Pause / resume (also stops the voice) |
 | 🔊 | Mute / unmute spoken commentary |
 | ⧉ | Copy the current line |
+| 💬 | Post the current line to Zwift chat (only when switched on) |
 
 ## Optional: GOTTA.BIKE rider data
 

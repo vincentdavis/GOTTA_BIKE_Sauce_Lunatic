@@ -114,6 +114,26 @@
             </section>
 
             <section class="settings-section">
+                <h2>Zwift chat</h2>
+                <p class="help-text">Post the commentary into Zwift's own chat, where
+                    <strong>everyone riding near you sees it</strong> &mdash; not just you. Off unless
+                    you turn it on.</p>
+                <form id="chat-options">
+                    <label>
+                        <key>Post to Zwift chat:</key>
+                        <select name="zwiftChat">
+                            <option value="off">Off</option>
+                            <option value="manual">Only when I press the button</option>
+                            <option value="auto">Every line (at most one every 30s)</option>
+                        </select>
+                    </label>
+                </form>
+                <p class="help-text">A <ms>forum</ms> button appears in the announcer window when this
+                    is on. Lines are trimmed to fit a chat bubble.</p>
+                <p class="help-text" id="chat-conn-note"></p>
+            </section>
+
+            <section class="settings-section">
                 <h2>Display Options</h2>
                 <form id="display-options">
                     <label>

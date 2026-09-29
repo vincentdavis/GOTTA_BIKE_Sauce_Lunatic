@@ -167,6 +167,10 @@ common.settingsStore.setDefault({
     // Live cadence (event-driven)
     eventDriven: true,
     minInterval: 12,
+    // Posting commentary into Zwift's own chat: 'off' | 'manual' | 'auto'.
+    // Off by default, and deliberately: chat goes to everyone around you, and
+    // the announcer can fire eight times a minute.
+    zwiftChat: 'off',
     // Text-to-speech. ON: the mod's one-line description is "spoken aloud", and
     // a rider who never finds the switch never hears the thing they installed.
     // The speaker button in the overlay titlebar mutes it in one click, and the
@@ -310,6 +314,7 @@ export async function lunaticAnnouncerMain() {
 
     // Setup UI
     setupMainWindowUI();
+    setupZwiftChat();
     updateApiStatus();
     updatePauseButton();
     renderCost();
@@ -414,6 +419,7 @@ export async function lunaticAnnouncerMain() {
             updateMuteButton();
             if (!common.settingsStore.get('ttsEnabled')) cancelSpeech();
         }
+        if (changed.has('zwiftChat')) updateChatButton();
         if (changed.has('showHistory') || changed.has('historyCount')) {
             renderHistory();
         }
@@ -886,6 +892,10 @@ async function generateCommentary(manual = false) {
 
         saveToHistory(response);
         displayCommentary(response);
+        // After the line is complete: a half-streamed sentence is not something
+        // to put in front of everyone riding nearby. Silent and rate-limited —
+        // its own failures are not worth a toast over a race.
+        if (chatMode() === 'auto') postToZwiftChat(response);
         updateConversationHistory(userPrompt, response);
 
         // Clear any prior error state on the status indicator.
@@ -1391,6 +1401,129 @@ function shouldFireNow(now) {
     // Longest-silence floor (the existing updateInterval setting).
     const maxSilence = clockSeconds() * 1000;
     return maxSilence > 0 && sinceLast > maxSilence;
+}
+
+// ============================================================================
+// Posting a line into Zwift's chat
+// ============================================================================
+// Sauce can send a chat message into the game — `rpc.chatMessage`, registered
+// by its Game Connection server. Three things make this different from every
+// other output the mod has, and all three shape what is below:
+//
+//   1. It is not the rider's screen. A global message goes to everyone around
+//      them, so the default is off and 'auto' carries a floor the commentary
+//      cadence cannot breach.
+//   2. It needs Game Connection, which is a Sauce-wide setting this mod cannot
+//      turn on, and which takes the single Companion App slot when it is on.
+//      So the state has to be reported, not assumed.
+//   3. Zwift chat is a bubble over a rider's head, not a paragraph.
+
+/** One post per this long in 'auto'. The cadence alone allows eight a minute. */
+const CHAT_AUTO_FLOOR_MS = 30000;
+/** Zwift renders chat in a small bubble; a paragraph is not readable there. */
+const CHAT_MAX_CHARS = 240;
+
+let gameConnection = { connected: false, state: 'unknown' };
+let lastChatPostAt = 0;
+
+function chatMode() {
+    const m = common.settingsStore.get('zwiftChat');
+    return (m === 'manual' || m === 'auto') ? m : 'off';
+}
+
+/** Trim to a bubble, on a word boundary, with an ellipsis if anything went. */
+function fitForChat(text) {
+    const clean = String(text || '').replace(/\s+/g, ' ').trim();
+    if (clean.length <= CHAT_MAX_CHARS) return clean;
+    const cut = clean.slice(0, CHAT_MAX_CHARS - 1);
+    const space = cut.lastIndexOf(' ');
+    return `${(space > CHAT_MAX_CHARS * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
+/**
+ * Send one line to the game. Returns what happened, for the caller to show.
+ *
+ * `manual` is a button press, so it reports refusals and ignores the auto
+ * floor; an automatic post is silent and rate-limited.
+ */
+async function postToZwiftChat(text, { manual = false } = {}) {
+    if (chatMode() === 'off') return { ok: false, reason: 'Posting to Zwift chat is off.' };
+    if (!gameConnection.connected) {
+        return { ok: false, reason: 'Sauce is not connected to the game — turn on Game Connection ' +
+            'in Sauce\u2019s own settings.' };
+    }
+    const msg = fitForChat(text);
+    if (!msg) return { ok: false, reason: 'Nothing to post yet.' };
+
+    const now = Date.now();
+    if (!manual && now - lastChatPostAt < CHAT_AUTO_FLOOR_MS) return { ok: false, reason: 'rate' };
+
+    try {
+        await common.rpc.chatMessage(msg);
+        lastChatPostAt = now;
+        return { ok: true, text: msg };
+    } catch (err) {
+        console.warn('[Lunatic] chat post failed:', err);
+        return { ok: false, reason: err?.message || 'Zwift refused the message.' };
+    }
+}
+
+/** The titlebar button: hidden when off, dimmed when the game is not reachable. */
+function updateChatButton() {
+    const btn = document.getElementById('chat-btn');
+    if (!btn) return;
+    const mode = chatMode();
+    btn.hidden = mode === 'off';
+    const ready = gameConnection.connected;
+    btn.classList.toggle('unavailable', !ready);
+    btn.title = !ready
+        ? 'Post to Zwift chat — needs Game Connection, in Sauce\u2019s own settings'
+        : (mode === 'auto'
+            ? 'Posting every line to Zwift chat. Click to post this one now.'
+            : 'Post this line to Zwift chat');
+}
+
+/** Say, in the settings window, whether Sauce can reach the game at all. */
+function renderChatConnNote() {
+    const el = document.getElementById('chat-conn-note');
+    if (!el) return;
+    const paint = st => {
+        const connected = !!st?.connected;
+        el.textContent = connected
+            ? 'Sauce is connected to the game, so this will work.'
+            : 'Needs Sauce\u2019s own Game Connection setting, which is off. Turning it on takes ' +
+              'the single Companion App slot, so Zwift Companion on your phone stops working ' +
+              'while it is on.';
+        el.className = connected ? 'help-text' : 'help-text warn';
+    };
+    Promise.resolve(common.rpc.getGameConnectionStatus?.()).then(paint).catch(() => paint(null));
+    try {
+        common.subscribe('status', paint, { source: 'gameConnection', persistent: true });
+    } catch (e) { /* the host may not offer it at all */ }
+}
+
+function setupZwiftChat() {
+    // Registered unconditionally by Sauce, and it answers
+    // {connected:false, state:'disabled'} when Game Connection is off — so this
+    // is safe to call whatever the host is doing.
+    const readStatus = st => {
+        gameConnection = { connected: !!st?.connected, state: st?.state || 'unknown' };
+        updateChatButton();
+    };
+    try {
+        common.subscribe('status', readStatus, { source: 'gameConnection', persistent: true });
+    } catch (e) {
+        console.warn('[Lunatic] gameConnection status unavailable:', e);
+    }
+    Promise.resolve(common.rpc.getGameConnectionStatus?.()).then(readStatus).catch(() => {});
+
+    document.getElementById('chat-btn')?.addEventListener('click', async () => {
+        const line = commentaryHistory[0]?.text;
+        const res = await postToZwiftChat(line, { manual: true });
+        if (!res.ok) showError(res.reason);
+    });
+
+    updateChatButton();
 }
 
 // ============================================================================
@@ -1909,6 +2042,7 @@ export async function lunaticAnnouncerSettingsMain() {
     // with no voices ready -- the tab strip, the provider fields, all of it.
     populateVoicePicker();
     await common.initSettingsForm('#audio-options')();
+    await common.initSettingsForm('#chat-options')();
     setupVoiceTest();
 
     // The Data Fields tab reports whether the GOTTA.BIKE import has anything
@@ -1929,6 +2063,7 @@ export async function lunaticAnnouncerSettingsMain() {
 
     renderHelpLink();
     renderHelpVoices();
+    renderChatConnNote();
 
     // Render shared cost counters and keep them live across windows.
     renderCost();

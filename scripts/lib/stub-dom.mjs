@@ -79,7 +79,15 @@ export function makeEl(tag = 'div', data = {}) {
         hasAttribute: k => el[k] != null,
         removeAttribute: k => { delete el[k]; },
         closest: () => el,
-        querySelector: () => makeEl(),
+        // Cached per selector. It used to hand back a FRESH element every
+        // call, so anything the mod wrote through el.querySelector(...) went
+        // into an orphan nobody could see -- displayCommentary() writes the
+        // commentary itself that way, and no test could assert a word of it.
+        querySelector: sel => {
+            const q = (el._q ||= new Map());
+            if (!q.has(sel)) q.set(sel, makeEl());
+            return q.get(sel);
+        },
         querySelectorAll: () => [],
         // Real focus tracking: a handler that restores focus after an async
         // action is asserting something a test should be able to see.
@@ -160,7 +168,17 @@ export function installGlobals({ providerRows = [], selectors = {}, voices = nul
         querySelector: sel => el(`sel:${sel}`),
         querySelectorAll: sel => selectors[sel] || (sel === '[data-provider]' ? providerRows : []),
         createElement: makeEl,
-        createTextNode: t => ({ textContent: t }),
+        // A real Text node, because the streaming display path appends to one
+        // delta by delta. Without appendData the whole stream threw on the
+        // first chunk -- and nothing in the suite had ever streamed a line.
+        createTextNode: t => {
+            const n = { nodeType: 3, data: String(t) };
+            Object.defineProperty(n, 'textContent', {
+                get: () => n.data, set: v => { n.data = String(v); }, enumerable: true
+            });
+            n.appendData = more => { n.data += String(more); };
+            return n;
+        },
         addEventListener: () => {}
     };
     globalThis.document.activeElement = globalThis.document.body;
@@ -236,9 +254,24 @@ export const settingsStore = {
 export function initInteractionListeners() {}
 export function initSettingsForm() { return async () => {}; }
 export function initNationFlags() {}
-export const rpc = new Proxy({}, { get: () => async () => ({}) });
+// Every RPC is recorded, so a test can assert what the mod asked the host to
+// do -- posting a chat message into the game is not something to take on trust.
+// rpcResults lets a test answer one; anything unanswered resolves to {}.
+export const rpcCalls = [];
+export const rpcResults = new Map();
+export const rpc = new Proxy({}, {
+    get: (_, name) => async (...args) => {
+        rpcCalls.push({ name: String(name), args });
+        const answer = rpcResults.get(String(name));
+        return typeof answer === 'function' ? answer(...args) : (answer ?? {});
+    }
+});
+// Sauce keys a subscription by source as well as name ('status' from
+// gameConnection is not 'status' from anything else), so the stub does too.
 export const subscribed = new Map();
-export const subscribe = (name, fn) => { subscribed.set(name, fn); };
+export const subscribe = (name, fn, options = {}) => {
+    subscribed.set(options.source ? options.source + ':' + name : name, fn);
+};
 `;
 
 /**

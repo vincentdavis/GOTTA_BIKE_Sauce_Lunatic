@@ -47,6 +47,14 @@ body.solid-background {
     border-radius: 4px;
 }
 
+/* Posting to Zwift chat needs Sauce's Game Connection, which is Sauce's own
+   setting and may be off. Dim rather than hide: the button is the only place
+   that explains why, in its tooltip. */
+#titlebar .button#chat-btn.unavailable {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
 /* The titlebar auto-hides once the overlay is chromeless in-game, so this bar is
    the top-left of what a rider actually sees. That makes it the one place a mark
    is both visible and out of the commentary's way. SVG, not the PNG the titlebar
