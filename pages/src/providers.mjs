@@ -27,7 +27,7 @@
  * Gemini re-sends cumulative totals on every chunk.
  */
 
-export const DEFAULT_PROVIDER = 'anthropic';
+export const DEFAULT_PROVIDER = 'hosted';
 
 // Leading slash: global across the Sauce origin, so the overlay and the
 // settings window share one device token rather than minting two.

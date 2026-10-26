@@ -25,15 +25,95 @@
     </div>
 
     <div class="tab-navigation">
-        <button type="button" class="tab-btn active" data-tab="settings-tab">Settings</button>
+        <button type="button" class="tab-btn active" data-tab="account-tab">Account</button>
+        <button type="button" class="tab-btn" data-tab="settings-tab">Settings</button>
         <button type="button" class="tab-btn" data-tab="api-tab">AI Provider</button>
         <button type="button" class="tab-btn" data-tab="prompts-tab">Voices</button>
         <button type="button" class="tab-btn" data-tab="data-tab">Data Fields</button>
         <button type="button" class="tab-btn" data-tab="help-tab">Help</button>
     </div>
 
+    <!-- Account Tab. First, and where the window opens: the connection row
+         used to be two thirds of the way down the AI Provider tab, under the
+         key fields of providers it has nothing to do with. -->
+    <div id="account-tab" class="tab-panel active">
+        <div class="settings-content">
+            <section class="settings-section">
+                <h2>Your Lunatic account</h2>
+                <p class="help-text" id="account-pitch-intro">The announcer needs an AI to write its
+                    lines. Signing in with Discord is the quickest way to get one, and it is free.</p>
+
+                <ul class="account-benefits" id="account-pitch">
+                    <li><strong>A bigger monthly allowance</strong> of free calls than connecting
+                        anonymously.</li>
+                    <li><strong>Your key comes back</strong> after a reinstall, and on any machine
+                        you sign in on. An anonymous connection is lost when you clear your
+                        settings.</li>
+                    <li><strong>Your own API key is unlocked.</strong> Anthropic and
+                        OpenAI-compatible providers on the <a href="#" data-goto-tab="api-tab">AI
+                        Provider</a> tab need an account.</li>
+                </ul>
+
+                <div class="conn-state">
+                    <span id="hosted-conn-badge" class="conn-badge"></span>
+                    <span id="hosted-conn-text"></span>
+                </div>
+
+                <div class="api-actions">
+                    <button type="button" id="hosted-signin-btn">Sign in with Discord</button>
+                    <button type="button" id="hosted-connect-btn" class="secondary-action">Connect anonymously</button>
+                    <!-- Shown only while a sign-in is in flight. Without it the
+                         only exits were a 15-minute timeout or closing the
+                         window, which loses the pairing. -->
+                    <button type="button" id="hosted-cancel-btn" hidden>Cancel</button>
+                    <button type="button" id="hosted-signout-btn">Sign out</button>
+                    <span id="hosted-status"></span>
+                </div>
+
+                <p class="help-text">
+                    <a id="hosted-signin-link" href="#" target="_blank" rel="noopener" hidden></a>
+                    <span id="hosted-signin-hint" hidden>Keep this window open &mdash; the sign-in
+                        finishes here, usually within a few seconds of the browser saying done.</span>
+                </p>
+
+                <p class="help-text">
+                    <span id="hosted-quota"></span>
+                </p>
+
+                <!-- The service's sign-in page tells a rider to paste their key
+                     in when the mod did not pick it up. Until now there was no
+                     field to paste it into. -->
+                <details class="paste-key">
+                    <summary>Have a key already? Paste it</summary>
+                    <label>
+                        <key>Key:</key>
+                        <input type="text" id="hosted-paste-key" placeholder="luna_&hellip;"
+                               autocomplete="off" style="--size: 30"/>
+                        <button type="button" id="hosted-paste-btn">Use this key</button>
+                    </label>
+                    <p class="help-text">From the sign-in page in your browser, if the mod did not
+                        collect it automatically.</p>
+                </details>
+
+                <!-- Closed by default: almost nobody changes it, but signing in
+                     reads this field, so it cannot live on another tab. -->
+                <details class="paste-key">
+                    <summary>Running your own service?</summary>
+                    <label>
+                        <key>Service URL:</key>
+                        <input type="text" id="hosted-base-url"
+                               value="https://gottabikesaucelunatic-production.up.railway.app"
+                               placeholder="https://your-app.up.railway.app" style="--size: 34"/>
+                    </label>
+                    <p class="help-text">Where sign-in, the free calls and the voice updates go.
+                        Leave it alone unless you deployed the service yourself.</p>
+                </details>
+            </section>
+        </div>
+    </div>
+
     <!-- Settings Tab -->
-    <div id="settings-tab" class="tab-panel active">
+    <div id="settings-tab" class="tab-panel">
         <div class="settings-content">
             <p class="help-text setup-nudge" id="setup-nudge" hidden>No AI provider yet &mdash;
                 <a href="#" data-goto-tab="api-tab">set one up</a> to start hearing commentary.</p>
@@ -202,6 +282,13 @@
                     </label>
                     <p class="help-text no-key-hint" id="no-key-hint" hidden>No key? Choose
                         <strong>Lunatic hosted (free)</strong> above.</p>
+                    <!-- Filled by renderByokLock(). Your own key needs an
+                         account; the two options above are disabled until
+                         there is one. -->
+                    <p class="help-text warn" id="byok-locked" hidden>Using your own API key needs a
+                        Lunatic account. <a href="#" data-goto-tab="account-tab">Sign in with
+                        Discord</a> &mdash; it is free, and it also raises your allowance of free
+                        calls.</p>
 
                     <!-- Anthropic -->
                     <label class="api-key-row" data-provider="anthropic">
@@ -279,13 +366,6 @@
                      entirely by setupHostedControls(). -->
                 <div id="hosted-fields" data-provider="hosted">
                     <label>
-                        <key>Service URL:</key>
-                        <input type="text" id="hosted-base-url"
-                               value="https://gottabikesaucelunatic-production.up.railway.app"
-                               placeholder="https://your-app.up.railway.app" style="--size: 34"/>
-                    </label>
-
-                    <label>
                         <key>Model:</key>
                         <select id="hosted-model"><option value="free-fast">Fast</option></select>
                     </label>
@@ -296,47 +376,6 @@
 
                 <p class="help-text" data-provider="compatible" id="compat-hint"></p>
                 <p class="help-text" data-provider="compatible">Model IDs are free text because they change faster than this mod ships &mdash; paste whatever your service currently offers. The cost fields are optional and only drive the spend readout; leave them blank and cost shows as untracked.</p>
-
-                <div class="conn-state" data-provider="hosted">
-                    <span id="hosted-conn-badge" class="conn-badge"></span>
-                    <span id="hosted-conn-text"></span>
-                </div>
-
-                <div class="api-actions" data-provider="hosted">
-                    <button type="button" id="hosted-signin-btn">Sign in with Discord</button>
-                    <button type="button" id="hosted-connect-btn">Connect anonymously</button>
-                    <!-- Shown only while a sign-in is in flight. Without it the
-                         only exits were a 15-minute timeout or closing the
-                         window, which loses the pairing. -->
-                    <button type="button" id="hosted-cancel-btn" hidden>Cancel</button>
-                    <button type="button" id="hosted-signout-btn">Sign out</button>
-                    <span id="hosted-status"></span>
-                </div>
-
-                <p class="help-text" data-provider="hosted">
-                    <a id="hosted-signin-link" href="#" target="_blank" rel="noopener" hidden></a>
-                    <span id="hosted-signin-hint" hidden>Keep this window open &mdash; the sign-in
-                        finishes here, usually within a few seconds of the browser saying done.</span>
-                </p>
-
-                <!-- The service's sign-in page tells a rider to paste their key
-                     in when the mod did not pick it up. Until now there was no
-                     field to paste it into. -->
-                <details class="paste-key" data-provider="hosted">
-                    <summary>Have a key already? Paste it</summary>
-                    <label>
-                        <key>Key:</key>
-                        <input type="text" id="hosted-paste-key" placeholder="luna_&hellip;"
-                               autocomplete="off" style="--size: 30"/>
-                        <button type="button" id="hosted-paste-btn">Use this key</button>
-                    </label>
-                    <p class="help-text">From the sign-in page in your browser, if the mod did not
-                        collect it automatically.</p>
-                </details>
-
-                <p class="help-text" data-provider="hosted">
-                    <span id="hosted-quota"></span>
-                </p>
 
 
                 <div class="api-actions" data-provider="anthropic compatible">
@@ -358,11 +397,6 @@
                     </div>
                     <p class="api-next-step" id="api-next-step" hidden></p>
                 </div>
-
-                <p class="help-text" data-provider="hosted"><strong>Sign in with Discord</strong> for a
-                    bigger monthly allowance and a key that comes back after a reinstall.
-                    <strong>Connect anonymously</strong> needs no account, but the allowance is smaller
-                    and clearing your settings loses it.</p>
 
                 <p class="help-text" data-provider="hosted">Built-in voices all work on Lunatic hosted.
                     A prompt you wrote is not used here &mdash; use your own API key to hear it.</p>

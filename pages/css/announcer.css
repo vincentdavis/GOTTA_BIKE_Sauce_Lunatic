@@ -466,6 +466,44 @@ body:not(.transparent-bg) {
     font-size: 0.9em;
 }
 
+/* Two blue buttons the same size make a rider choose between equals. On the
+   Account tab they are not: signing in is the recommended path and connecting
+   anonymously is the fallback, so only the first one is filled.
+
+   .api-actions button sets the filled style, so these override it rather than
+   defining a new one -- a second button family at the same tier is what F23 is
+   about, and this is not the pass that fixes that. */
+.api-actions button.secondary-action,
+.api-actions button#hosted-signout-btn,
+.api-actions button#hosted-cancel-btn {
+    background: transparent;
+    border: 1px solid #4a5560;
+    color: #cfd8dd;
+}
+
+.api-actions button.secondary-action:hover,
+.api-actions button#hosted-signout-btn:hover,
+.api-actions button#hosted-cancel-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: #6a7682;
+}
+
+/* The benefits of an account, above the buttons that get you one. */
+.account-benefits {
+    margin: 0.6em 0 1em;
+    padding-left: 1.3em;
+    color: #ccc;
+    line-height: 1.6;
+}
+
+.account-benefits li {
+    margin-bottom: 0.35em;
+}
+
+.account-benefits strong {
+    color: #fff;
+}
+
 /* A test in flight: the button is Cancel, not a disabled Test Connection.
    Muted so it does not read as the primary action while it is a way out. */
 .api-actions button.testing {

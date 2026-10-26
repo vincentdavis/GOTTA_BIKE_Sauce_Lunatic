@@ -2029,6 +2029,12 @@ export async function lunaticAnnouncerSettingsMain() {
     migrateModelSetting();
     // Before setupDataFields() reads powerMode into the select.
     migrateDataFields();
+    // A rider left pointing at a provider they can no longer choose, with no
+    // key to grandfather them in, is pointing at nothing. Move them to the one
+    // that works rather than leaving a dead selection they cannot re-pick.
+    if (!byokUnlocked() && activeProviderId() !== 'hosted') {
+        common.settingsStore.set('aiProvider', 'hosted');
+    }
 
     // Initialize settings form — the returned callback MUST be invoked (the
     // trailing ()) or fields never load and every edit throws before saving.
@@ -2116,6 +2122,40 @@ export async function lunaticAnnouncerSettingsMain() {
     updateCustomColorVisibility();
 }
 
+/**
+ * May this rider configure a provider of their own?
+ *
+ * Signing in with Discord unlocks the Anthropic and OpenAI-compatible options.
+ * A key that is ALREADY stored keeps working whatever the answer: the gate is
+ * on adding one, and an upgrade must not strip a rider of the provider they
+ * were already paying for.
+ */
+function byokUnlocked() {
+    if (tokenKind(common.settingsStore.get(DEVICE_TOKEN_KEY)) === 'discord') return true;
+    return !!(common.settingsStore.get('claudeApiKey') || common.settingsStore.get('compatApiKey'));
+}
+
+/** Disable the own-key options, and say why, while there is no account. */
+function renderByokLock() {
+    const unlocked = byokUnlocked();
+    const note = document.getElementById('byok-locked');
+    const sel = document.querySelector('select[name="aiProvider"]');
+
+    if (sel) {
+        for (const opt of sel.children) {
+            if (opt.value === 'anthropic' || opt.value === 'compatible') opt.disabled = !unlocked;
+        }
+    }
+    // Shown whenever the own-key options are locked, not only on hosted: the
+    // first version hid it on exactly the screen where a rider is sitting on a
+    // locked provider wondering why they cannot pick it.
+    if (note) note.hidden = unlocked;
+    // It would otherwise sit directly above the lock note saying a weaker
+    // version of the same thing.
+    const noKeyHint = document.getElementById('no-key-hint');
+    if (noKeyHint && !unlocked) noKeyHint.hidden = true;
+}
+
 /** Show one tab. Exported to the rest of the file, not just the tab strip. */
 function activateTab(tabId) {
     const tabBtns = document.querySelectorAll('.tab-btn');
@@ -2143,11 +2183,13 @@ function setupTabs() {
         });
     }
 
-    // Where to open. The overlay's only instruction is "pick an AI provider",
-    // and the gear used to land on Font scaling with nothing pointing one tab
-    // over. Unconfigured -> the provider tab; otherwise where they last were.
+    // Where to open. Account is the default: an AI to write the lines is the
+    // one thing the mod cannot work without, and signing in is the quickest way
+    // to get one. A rider with nothing set up at all lands there whatever they
+    // last looked at; everyone else goes back where they were.
     const remembered = common.settingsStore.get('settingsTab');
-    activateTab(!isProviderConfigured() ? 'api-tab' : (remembered || 'settings-tab'));
+    const setUp = isProviderConfigured() || !!common.settingsStore.get(DEVICE_TOKEN_KEY);
+    activateTab(!setUp ? 'account-tab' : (remembered || 'account-tab'));
 }
 
 /** Show/hide toggle plus trim-on-save for one API key field. */
@@ -2364,7 +2406,12 @@ function renderApiInfo() {
     let state, text;
     if (!configured) {
         state = 'unconfigured';
-        text = 'Not configured — pick Lunatic hosted for free commentary, or paste an API key.';
+        // The old text told a hosted rider to pick Lunatic hosted, which they
+        // had. What they are missing is a connection, and that lives on the
+        // Account tab now.
+        text = providerId === 'hosted'
+            ? 'Not connected — sign in or connect on the Account tab.'
+            : 'Not configured — paste an API key, or pick Lunatic hosted for free commentary.';
     } else if (providerId === 'hosted' && quotaInfo()?.remaining <= 0) {
         // Ahead of the test outcome on purpose. Green "Configured" over an
         // allowance that refuses every call was the worst lie on the tab: it is
@@ -2456,6 +2503,20 @@ function renderConnection() {
         }[kind];
     }
 
+    // Selling Discord to someone already signed in is the most text on the one
+    // screen with nothing left to do. Three reasons to sign in become one line
+    // confirming what they have.
+    const pitch = document.getElementById('account-pitch');
+    const pitchIntro = document.getElementById('account-pitch-intro');
+    if (pitch) pitch.hidden = kind === 'discord';
+    if (pitchIntro) {
+        pitchIntro.textContent = kind === 'discord'
+            ? 'Signed in: the bigger allowance, a key that survives a reinstall, and your own ' +
+              'API key unlocked on the AI Provider tab.'
+            : 'The announcer needs an AI to write its lines. Signing in with Discord is the ' +
+              'quickest way to get one, and it is free.';
+    }
+
     // Offer the anonymous button only when it is an upgrade or a start — never
     // as a way to downgrade an account you are already signed into.
     if (signInBtn) signInBtn.hidden = kind === 'discord';
@@ -2489,6 +2550,7 @@ function setupProviderControls() {
         }
         if (hintEl) hintEl.textContent = presetFor(activePresetId()).hint || '';
         renderConnection();
+        renderByokLock();
         updateApiInfo();
     };
 

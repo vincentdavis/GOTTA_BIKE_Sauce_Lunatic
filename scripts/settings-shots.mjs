@@ -85,8 +85,15 @@ const GLYPHS = { close: '✕', visibility: '👁', visibility_off: '🙈', volum
 const TEMPLATE = '{raceContext}\n{events}\n{watchingSection}\n{riders}\n{recentLines}';
 
 export const STATES = [
+    { name: '00-account-first-run', seed: {}, tab: 'account-tab',
+      note: 'Where the window now opens on a fresh install.' },
+    { name: '00b-account-discord', seed: { ...HOSTED,
+        '/gotta-bike-lunatic-device-token': 'luna_acct_mock',
+        '/gotta-bike-lunatic-account': { name: 'vincent' } }, tab: 'account-tab',
+      note: 'Signed in.' },
     { name: '01-settings-tab', seed: {}, tab: 'settings-tab' },
-    { name: '02-api-first-run', seed: {}, tab: 'api-tab', note: 'Fresh install: nothing configured. What a new rider sees first.' },
+    { name: '02-api-first-run', seed: {}, tab: 'api-tab',
+      note: 'No account: the own-key providers are locked and say why.' },
     { name: '03-api-anthropic-configured', seed: KEYED, tab: 'api-tab' },
     { name: '04-api-compatible-gemini', seed: { aiProvider: 'compatible', compatPreset: 'gemini',
         compatBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', compatApiKey: 'AIzaEXAMPLE', compatModel: 'gemini-2.5-flash' }, tab: 'api-tab' },

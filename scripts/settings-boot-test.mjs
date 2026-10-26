@@ -33,7 +33,7 @@ const rows = {
 };
 
 // The tab strip, so first-run landing and tab memory can be driven.
-const tabBtns = ['settings-tab', 'api-tab', 'prompts-tab', 'data-tab', 'help-tab']
+const tabBtns = ['account-tab', 'settings-tab', 'api-tab', 'prompts-tab', 'data-tab', 'help-tab']
     .map(id => makeEl('button', { tab: id }));
 const tabPanels = tabBtns.map(b => { const p = makeEl('div'); p.id = b.dataset.tab; return p; });
 const activeTab = () => tabBtns.find(b => b._classes.has('active'))?.dataset.tab;
@@ -47,6 +47,15 @@ installGlobals({ providerRows: Object.values(rows),
                               '.help-online-link': onlineLinks } });
 const { mod, common: { settingsStore } } = await loadAnnouncer();
 
+// The provider <select>'s options. The stub does not parse them out of the
+// HTML, and renderByokLock() disables two of them to gate your own API key
+// behind an account, so they have to exist for any of that to be visible.
+for (const value of ['hosted', 'anthropic', 'compatible']) {
+    const opt = makeEl('option');
+    opt.value = value;
+    document.querySelector('select[name="aiProvider"]').children.push(opt);
+}
+
 section('the settings window boots at all');
 let bootErr = null;
 try {
@@ -58,17 +67,38 @@ check('lunaticAnnouncerSettingsMain() runs to completion', !bootErr,
     bootErr ? `${bootErr.constructor.name}: ${bootErr.message}` : '');
 bailOnBootFailure(bootErr);
 
-section('F02: first run lands on the provider tab');
-check('unconfigured, the window opens on AI Provider', activeTab() === 'api-tab', String(activeTab()));
+// F02 landed a first run on the provider tab. The account came first after
+// that: an AI to write the lines is the one thing the mod cannot work without,
+// and signing in is the quickest way to get one.
+section('first run lands on the account tab');
+check('nothing set up, the window opens on Account', activeTab() === 'account-tab',
+    String(activeTab()));
 check('and the Settings tab carries a nudge', el('setup-nudge').hidden === false);
-fire(tabBtns[2], 'click');
+fire(tabBtns[3], 'click');
 check('clicking a tab activates it', activeTab() === 'prompts-tab', String(activeTab()));
 check('and remembers it', settingsStore.get('settingsTab') === 'prompts-tab');
 
+// A fresh install now defaults to the free hosted provider, because the
+// own-key ones need an account. These sections are about the own-key path, so
+// they put the rider on it deliberately.
+settingsStore.set('aiProvider', 'anthropic');
+
 section('F03/F04: the status box before a key exists');
 check('the status box is shown, not hidden', el('api-info').hidden === false);
-check('and says what to do', /Not configured — pick Lunatic hosted/.test(el('api-status-text').textContent),
+// What is missing depends on the provider: an own-key rider needs a key, a
+// hosted one needs a connection, and that lives on the Account tab now.
+check('and says what to do', /Not configured — paste an API key/.test(el('api-status-text').textContent),
     el('api-status-text').textContent);
+{
+    const sel = document.querySelector('select[name="aiProvider"]');
+    sel.value = 'hosted';
+    fire(sel, 'change');
+    check('on hosted it points at the Account tab, not at a provider already picked',
+        /Not connected — sign in or connect on the Account tab/.test(el('api-status-text').textContent),
+        el('api-status-text').textContent);
+    sel.value = 'anthropic';
+    fire(sel, 'change');
+}
 check('it is not tinted green', !el('api-info').className.includes('connected'), el('api-info').className);
 check('the "No key?" hint shows on a keyed provider', el('no-key-hint').hidden === false);
 fire(el('test-api-btn'), 'click');
@@ -187,6 +217,13 @@ check('clearing the key returns to Not configured',
 settingsStore.set('claudeApiKey', 'sk-ant-api03-not-a-real-key');
 
 section('the provider visibility pass ran');
+// Earlier sections drive the hosted path, so say which provider this is
+// about -- through the select, because that is what re-runs the pass.
+{
+    const sel = document.querySelector('select[name="aiProvider"]');
+    sel.value = 'anthropic';
+    fire(sel, 'change');
+}
 check('anthropic rows shown', !hidden(rows.anthropic));
 check('compatible rows hidden', hidden(rows.compatible));
 check('hosted rows hidden', hidden(rows.hosted));
@@ -207,6 +244,51 @@ settingsStore.set(TOKEN_KEY, 'anon-token');
 fire(providerSel, 'change');
 check('an anonymous token reads as Anonymous', badge.textContent === 'Anonymous', badge.textContent);
 check('the badge class follows the state', badge.className === 'conn-badge anon', badge.className);
+
+// Using your own API key now needs a Lunatic account. The gate is on ADDING
+// one: a key already stored keeps working, because an upgrade must not strip a
+// rider of the provider they were already paying for.
+section('your own API key needs an account, but an existing one is not taken away');
+{
+    const sel = document.querySelector('select[name="aiProvider"]');
+    const opt = v => sel.children.find(o => o.value === v);
+    const locked = () => el('byok-locked').hidden === false;
+
+    // Start clean: no account, no key of any kind.
+    settingsStore.set(TOKEN_KEY, '');
+    settingsStore.set('claudeApiKey', '');
+    settingsStore.set('compatApiKey', '');
+    sel.value = 'hosted';
+    fire(sel, 'change');
+
+    check('Anthropic cannot be picked', opt('anthropic').disabled === true);
+    check('nor OpenAI-compatible', opt('compatible').disabled === true);
+    check('the free option still can', opt('hosted').disabled === false);
+    check('and the reason is on screen', locked(), el('byok-locked').textContent);
+
+    // An anonymous connection is not an account.
+    settingsStore.set(TOKEN_KEY, 'lun_anon_device_token');
+    fire(sel, 'change');
+    check('connecting anonymously does not unlock it', opt('anthropic').disabled === true);
+
+    settingsStore.set(TOKEN_KEY, 'luna_discord_account_key');
+    fire(sel, 'change');
+    check('signing in with Discord does', opt('anthropic').disabled === false);
+    check('and OpenAI-compatible with it', opt('compatible').disabled === false);
+    check('the note goes away', !locked(), el('byok-locked').textContent);
+
+    // The upgrade case: a rider who already had a key, and no account.
+    settingsStore.set(TOKEN_KEY, '');
+    settingsStore.set('claudeApiKey', 'sk-ant-api03-already-theirs');
+    fire(sel, 'change');
+    check('a key stored before the gate existed keeps its provider',
+        opt('anthropic').disabled === false);
+    check('and is not nagged about it', !locked(), el('byok-locked').textContent);
+
+    settingsStore.set('claudeApiKey', '');
+    settingsStore.set(TOKEN_KEY, 'anon-token');
+    fire(sel, 'change');
+}
 
 section('the voice picker, and the library behind it');
 const picker = el('style-preset');

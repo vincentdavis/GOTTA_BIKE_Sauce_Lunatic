@@ -147,6 +147,20 @@ Both HTML files import the same module and call different entry points:
   Only the overlay subscribes to `nearby`, so it publishes the id to
   `ATHLETE_ID_KEY` and `authHeader()` reads it. `/v1/quota` echoes `bucket` so the
   client can refuse to overwrite the shared `QUOTA_KEY` from the wrong one.
+- **Identity and engine are different tabs.** **Account** (first, and where the window opens)
+  holds who you are on the service: the connection row, Sign in / Connect / Sign out, the paste
+  field, the allowance, and the **Service URL** — that last one because signing in reads it, so it
+  cannot live on another tab. **AI Provider** holds which brain writes the lines. The connection
+  row used to sit two thirds of the way down the provider tab, under the key fields of providers it
+  has nothing to do with.
+- **Your own API key needs a Lunatic account, but the gate is on ADDING one.** `byokUnlocked()` is
+  true when signed in with Discord **or** when a key is already stored, so an upgrade never strips
+  a rider of the provider they were already paying for. `renderByokLock()` disables the two
+  `<option>`s and says why; at settings boot a rider left on a locked provider with no key is moved
+  to `hosted`, because a selection they cannot re-pick is a dead end.
+- **`DEFAULT_PROVIDER` is `hosted`.** It was `anthropic`, which the gate turned into a default a
+  new rider is not allowed to use — they landed on a locked provider with a key field and nothing
+  saying why. A default must be something a fresh install can actually use.
 - **The allowance is said in one place, `quotaSentence()`, and stored whole.** `/v1/quota` has
   always returned `resetsAt` and `tier`; the client threw both away, so it could not say when the
   calls came back or which allowance a rider was on. `QUOTA_INFO_KEY` holds the object and

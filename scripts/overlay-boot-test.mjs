@@ -48,6 +48,10 @@ check('the auto-update dot has a state class',
     ['active', 'manual', 'paused'].some(c => auto._classes.has(c)), [...auto._classes].join(' '));
 check('and a tooltip', !!auto.title, auto.title);
 
+// A fresh install defaults to the free hosted provider now that the own-key
+// ones need an account, so this puts the overlay on the own-key path first.
+settingsStore.set('aiProvider', 'anthropic');
+
 section('configuring a provider live updates the dot');
 // Through settingsStore, so this exercises the overlay's own `changed`
 // listener rather than calling the internal function directly.
