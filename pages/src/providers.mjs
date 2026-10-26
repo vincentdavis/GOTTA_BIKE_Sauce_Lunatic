@@ -60,6 +60,22 @@ export const ATHLETE_ID_KEY = '/gotta-bike-lunatic-athlete-id';
 export const ACCOUNT_KEY = '/gotta-bike-lunatic-account';
 
 /**
+ * A service that was found unable to do Discord sign-in: { url, reason }.
+ *
+ * Using your own API key needs a Lunatic account -- but a service that cannot
+ * mint one turns that requirement into a dead end. A self-hosted deployment
+ * with no Discord app configured, and ours with its storage down, both answer
+ * /v1/pair/start with 503 `accounts_unavailable`, so there is no sign-in to
+ * complete and no way out of the gate.
+ *
+ * Stored WITH the URL it was found at. Per-window rather than global: it
+ * describes the service this window is pointed at, and pointing it back at one
+ * that does do accounts has to restore the requirement rather than carry an
+ * unlock across.
+ */
+export const NO_ACCOUNTS_KEY = 'serviceWithoutAccounts';
+
+/**
  * Which kind of credential is stored: a Discord account key or an anonymous
  * device token. Derived from the prefix the service mints, so it stays correct
  * even if the cached display name is stale.

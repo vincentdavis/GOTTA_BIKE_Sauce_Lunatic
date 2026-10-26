@@ -48,10 +48,15 @@ this version do not linger.
 
 On the **AI Provider** tab, choose one of:
 
-- **Lunatic hosted** — no API key, a monthly allowance of free calls.
-- **Anthropic** — your own key, billed to your account.
+- **Lunatic hosted** — no API key, a monthly allowance of free calls. Nothing
+  else is needed; signing in with Discord raises the allowance.
+- **Anthropic** — your own key, billed to your Anthropic account.
 - **OpenAI-compatible** — OpenAI, Google Gemini, OpenRouter, Groq, or a local
   Ollama.
+
+The two own-key options need a free Lunatic account: sign in with Discord on the
+**Account** tab first. A key stored before that requirement existed keeps
+working.
 
 Whichever you choose, rider data leaves your machine: the names, power and heart
 rate of riders around you are sent to that service.

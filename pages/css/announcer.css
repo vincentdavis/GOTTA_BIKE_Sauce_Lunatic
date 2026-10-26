@@ -782,6 +782,14 @@ body:not(.transparent-bg) {
 #prompt-status.error { color: #d75a44; }
 #prompt-status.warn { color: #e0a33a; }
 
+/* Set by setupHostedControls()'s setStatus() on every sign-in outcome. None of
+   these was styled, so "Signed in as ..." and "Sign-in failed" were the same
+   colour as each other and as the label beside them. */
+#hosted-status.success { color: #52c07a; }
+#hosted-status.error { color: #e06c75; }
+#hosted-status.warn { color: #e0a33a; }
+#hosted-status.loading { opacity: 0.75; }
+
 .help-text.warn {
     color: #e0a33a;
 }

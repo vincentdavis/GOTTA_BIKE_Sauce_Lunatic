@@ -26,24 +26,30 @@ a one-line race call. Lines fire when something happens, not on a timer.
 - **Storyline memory.** An attack is remembered, so the catch two minutes later
   gets a callback.
 - **Won't repeat itself.** Lines that restate a recent one are dropped.
-- **Your choice of model.** Anthropic, or any OpenAI-compatible service — OpenAI,
-  Google Gemini, OpenRouter, Groq, or a local Ollama.
+- **Your choice of model.** Free hosted models, or your own key with Anthropic or
+  any OpenAI-compatible service — OpenAI, Google Gemini, OpenRouter, Groq, or a
+  local Ollama.
 
 ## Three ways to get commentary
 
-Pick one on the **AI Provider** tab.
+Pick one on the **AI Provider** tab. The hosted option needs nothing but a
+connection. **Using your own API key needs a free Lunatic account** — sign in
+with Discord on the **Account** tab first. A key you had stored before that
+requirement existed keeps working untouched.
 
 **Lunatic hosted — no API key.** Point the mod at a hosted service URL and click
 Connect. A monthly allowance of free calls; nothing is billed to you. The service
 supplies the announcer voice, so your own prompts are not used on this option.
 
-**Anthropic.** Paste a key from [console.anthropic.com](https://console.anthropic.com).
+**Anthropic.** Sign in with Discord, then paste a key from
+[console.anthropic.com](https://console.anthropic.com).
 The overlay calls `api.anthropic.com` directly and usage is billed to your account.
 Default model is Claude Haiku 4.5 — the fastest and cheapest, which is what live
 commentary wants. About $0.0013 a call, or $0.10–0.39 per hour of racing.
 
 **OpenAI-compatible.** OpenAI, Gemini, OpenRouter, Groq, or Ollama on your own
-machine. Choose the service to prefill its URL, paste a key, and enter a model id.
+machine. Needs a Lunatic account too. Choose the service to prefill its URL,
+paste a key, and enter a model id.
 Model ids are free text on purpose — they change faster than this mod ships.
 
 Whichever you pick, **rider data leaves your machine**: the names, power and heart

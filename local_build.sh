@@ -32,6 +32,7 @@ node scripts/overlay-boot-test.mjs > /dev/null
 node scripts/prompt-migration-test.mjs > /dev/null
 node scripts/data-fields-test.mjs > /dev/null
 node scripts/voice-machines-test.mjs > /dev/null
+node scripts/byok-gate-test.mjs > /dev/null
 node scripts/release-notes-test.mjs > /dev/null
 node scripts/prompt-parity-test.mjs > /dev/null
 node scripts/prompt-library-test.mjs > /dev/null

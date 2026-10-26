@@ -49,9 +49,12 @@
                     <li><strong>Your key comes back</strong> after a reinstall, and on any machine
                         you sign in on. An anonymous connection is lost when you clear your
                         settings.</li>
-                    <li><strong>Your own API key is unlocked.</strong> Anthropic and
-                        OpenAI-compatible providers on the <a href="#" data-goto-tab="api-tab">AI
-                        Provider</a> tab need an account.</li>
+                    <!-- Hidden by renderByokLock() on a service that cannot do
+                         accounts: there the key is already available and this
+                         would be a promise about a sign-in that returns 503. -->
+                    <li id="account-pitch-byok"><strong>Your own API key is unlocked.</strong>
+                        Anthropic and OpenAI-compatible providers on the
+                        <a href="#" data-goto-tab="api-tab">AI Provider</a> tab need an account.</li>
                 </ul>
 
                 <div class="conn-state">
@@ -618,19 +621,24 @@
 
             <section class="settings-section">
                 <h2>Getting Started</h2>
-                <p>Pick one of three ways to get commentary, on the <strong>AI Provider</strong> tab.</p>
+                <p>Pick one of three ways to get commentary, on the <strong>AI Provider</strong>
+                    tab. The first needs nothing but a connection; the other two need a free
+                    Lunatic account, which you get by signing in with Discord on the
+                    <strong>Account</strong> tab.</p>
                 <ol>
                     <li><strong>Lunatic hosted &mdash; no API key.</strong> Choose it in the
                         Provider dropdown and click <strong>Connect anonymously</strong>, or
                         <strong>Sign in with Discord</strong> for a bigger allowance that survives a
                         reinstall. A monthly allowance of free calls, nothing billed to you. Built-in
                         voices all work; a prompt you wrote is not used there.</li>
-                    <li><strong>Anthropic.</strong> Sign up at
+                    <li><strong>Anthropic &mdash; your own key.</strong> Sign in with Discord on
+                        the <strong>Account</strong> tab, then sign up at
                         <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>,
-                        create a key, paste it, and choose a model. Usage is billed to your account.</li>
-                    <li><strong>OpenAI-compatible.</strong> Works with OpenAI, Google Gemini, OpenRouter,
-                        Groq and a local Ollama. Choose the service, paste a key, and enter a model
-                        id.</li>
+                        create a key, paste it, and choose a model. Usage is billed to your
+                        Anthropic account, not to us.</li>
+                    <li><strong>OpenAI-compatible &mdash; your own key.</strong> Works with OpenAI,
+                        Google Gemini, OpenRouter, Groq and a local Ollama. Needs a Lunatic account
+                        too. Choose the service, paste a key, and enter a model id.</li>
                 </ol>
                 <p>Then click <strong>Test Connection</strong> &mdash; or
                 <strong>Connect anonymously</strong> on the hosted service &mdash; choose a voice on the

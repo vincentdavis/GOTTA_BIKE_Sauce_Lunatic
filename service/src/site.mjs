@@ -143,6 +143,9 @@ time, reacting to what actually happens on the road rather than to a timer.</p>
 <h2>Choose how it talks to an AI</h2>
 <p>Three options, on the <strong>AI Provider</strong> tab of the settings window. You can
 switch between them whenever you like.</p>
+<p>The hosted option needs nothing but a connection. <strong>Using your own API key needs a
+free account</strong>${accounts ? ' &mdash; sign in with Discord on the <strong>Account</strong> tab first' : ''}.
+A key you had stored before that requirement existed keeps working untouched.</p>
 
 <div class="card">
   <h3>Lunatic hosted — free, no API key</h3>
@@ -159,9 +162,10 @@ switch between them whenever you like.</p>
 
 <div class="card">
   <h3>Your own Anthropic key</h3>
-  <p>Create a key at <a href="https://console.anthropic.com">console.anthropic.com</a>, paste it
-  in, and pick a model. Usage is billed to your account — the overlay shows a running total,
-  and a typical line costs a fraction of a cent.</p>
+  <p>${accounts ? 'Sign in with Discord, then create' : 'Create'} a key at
+  <a href="https://console.anthropic.com">console.anthropic.com</a>, paste it
+  in, and pick a model. Usage is billed to your Anthropic account — the overlay shows a running
+  total, and a typical line costs a fraction of a cent.</p>
   <table class="rates">
     <tr><th>Model</th><th>Input / 1M</th><th>Output / 1M</th></tr>
     <tr><td>Claude Haiku 4.5</td><td>$1.00</td><td>$5.00</td></tr>
@@ -176,7 +180,7 @@ switch between them whenever you like.</p>
 <div class="card">
   <h3>Anything OpenAI-compatible</h3>
   <p>OpenAI, Google Gemini, OpenRouter, Groq, or a local Ollama. Choose the service, paste a
-  key, and enter a model id.</p>
+  key, and enter a model id.${accounts ? ' Needs a Lunatic account too.' : ''}</p>
   <p class="meta">Model ids are free text on purpose: they change often, so paste whatever your
   provider currently offers rather than waiting for the mod to catch up.</p>
   <p class="meta">The mod ships no price list for these, so the cost readout stays untracked

@@ -33,6 +33,7 @@ scripts/overlay-boot-test.mjs   boots the overlay, incl. the ~1Hz nearby handler
 scripts/prompt-migration-test.mjs  legacy voice ids land where they should
 scripts/data-fields-test.mjs       every Data Fields control is read; the powerMode migration
 scripts/voice-machines-test.mjs    the mod on Windows voices, non-English voices and none at all
+scripts/byok-gate-test.mjs         the account requirement for your own key, incl. a service that has no accounts
 scripts/prompt-parity-test.mjs     the mod and the service define the same voices
 scripts/prompt-library-test.mjs    the library's storage rules, driven directly
 scripts/prompt-updates-test.mjs    the update check, against the real service handler
@@ -153,11 +154,25 @@ Both HTML files import the same module and call different entry points:
   cannot live on another tab. **AI Provider** holds which brain writes the lines. The connection
   row used to sit two thirds of the way down the provider tab, under the key fields of providers it
   has nothing to do with.
-- **Your own API key needs a Lunatic account, but the gate is on ADDING one.** `byokUnlocked()` is
-  true when signed in with Discord **or** when a key is already stored, so an upgrade never strips
-  a rider of the provider they were already paying for. `renderByokLock()` disables the two
-  `<option>`s and says why; at settings boot a rider left on a locked provider with no key is moved
-  to `hosted`, because a selection they cannot re-pick is a dead end.
+- **Your own API key needs a Lunatic account, but the gate is on ADDING one.**
+  `byokUnlockedByOwnRight()` is true when signed in with Discord **or** when a key is already
+  stored, so an upgrade never strips a rider of the provider they were already paying for.
+  `renderByokLock()` disables the two `<option>`s and says why; at settings boot a rider left on a
+  locked provider with no key is moved to `hosted`, because a selection they cannot re-pick is a
+  dead end.
+- **A requirement the service cannot satisfy is not a gate, it is a wall.** A deployment with no
+  Discord app configured, and ours with its storage down, both refuse `/v1/pair/start` with 503
+  `accounts_unavailable` — so there was no sign-in to complete and no way out of the gate, on a
+  service that may have no hosted models configured either. `probeAccounts()` asks `/healthz`
+  (which has always reported `accounts`) at settings open, and only while the answer matters:
+  `byokUnlockedByOwnRight()` short-circuits it. The finding is stored with the URL it was made at
+  (`NO_ACCOUNTS_KEY`), so it cannot travel to a service that does do accounts. It **fails closed**
+  — unreachable, or a deployment too old to report the field, leaves the gate exactly as it was,
+  since failing open would hand the unlock to anyone who opened settings while offline. The 503
+  itself records it too, which is the path that works against a deployment of any age.
+- **`getJson()` keeps the error `code`, not just the message.** `accounts_unavailable` is the one
+  refusal a caller branches on, and matching on prose breaks the first time the service rewords
+  it.
 - **`DEFAULT_PROVIDER` is `hosted`.** It was `anthropic`, which the gate turned into a default a
   new rider is not allowed to use — they landed on a locked provider with a key field and nothing
   saying why. A default must be something a fresh install can actually use.
@@ -282,6 +297,7 @@ Both HTML files import the same module and call different entry points:
 'promptLibraryMigrated'              // per-window: prompt migrations ran
 'builtinPrompts'                     // per-window: voices fetched from the service
 'promptUpdates'                      // per-window: 'auto' (default) | 'off'
+'serviceWithoutAccounts'             // per-window: { url, reason } — this service cannot sign anyone in
 'zwiftChat'                          // per-window: 'off' (default) | 'manual' | 'auto'
 'promptUpdateNotice'                 // per-window: the undismissed "voices updated" line
 'settingsTab'                        // per-window: the tab the settings window last showed

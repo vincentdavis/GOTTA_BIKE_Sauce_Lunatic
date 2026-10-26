@@ -16,10 +16,15 @@
  *
  *   node scripts/settings-boot-test.mjs
  */
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
     installGlobals, loadAnnouncer, makeEl, el, fire, hidden,
     check, section, finish, bailOnBootFailure
 } from './lib/stub-dom.mjs';
+
+const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const TOKEN_KEY = '/gotta-bike-lunatic-device-token';
 
@@ -795,5 +800,22 @@ const fired = fire(el('hosted-signout-btn'), 'click');
 check('sign-out is wired', fired === 1);
 check('sign-out clears the token', !settingsStore.get(TOKEN_KEY));
 check('sign-out updates the badge', badge.textContent === 'Not connected', badge.textContent);
+
+// Static, and the one check in this file that the stub DOM cannot fake. It
+// invents an element for any id asked of it, so every assertion above would
+// pass just as happily against markup that no longer contains the thing being
+// read -- a renamed id, or one added to the module and never to the page, looks
+// exactly like a working control. Covers the overlay's ids too, since both
+// windows are the same module.
+section('every element the module looks up exists in a page');
+{
+    const mjs = readFileSync(join(REPO, 'pages/src/announcer.mjs'), 'utf8');
+    const pages = readFileSync(join(REPO, 'pages/announcer-settings.html'), 'utf8') +
+        readFileSync(join(REPO, 'pages/announcer.html'), 'utf8');
+    const ids = [...new Set([...mjs.matchAll(/getElementById\('([^']+)'\)/g)].map(m => m[1]))];
+    check('there are ids to check', ids.length >= 40, `${ids.length} found`);
+    const missing = ids.filter(id => !pages.includes(`id="${id}"`));
+    check('none of them is looked up in vain', !missing.length, missing.join(', '));
+}
 
 finish();

@@ -3,7 +3,7 @@ import * as common from '/pages/src/common.mjs';
 // though the mod's own file sits at the same relative path on disk.
 import {
     PROVIDERS, DEFAULT_PROVIDER, COMPATIBLE_PRESETS, DEVICE_TOKEN_KEY, QUOTA_KEY, QUOTA_INFO_KEY,
-    PAIRING_KEY, ACCOUNT_KEY,
+    PAIRING_KEY, ACCOUNT_KEY, NO_ACCOUNTS_KEY,
     ATHLETE_ID_KEY,
     providerFor, presetFor, costFor, streamCompletion, tokenKind
 } from './providers.mjs';
@@ -2123,21 +2123,69 @@ export async function lunaticAnnouncerSettingsMain() {
 }
 
 /**
- * May this rider configure a provider of their own?
+ * Unlocked by something this rider holds, rather than by the service being
+ * unable to ask for one.
  *
  * Signing in with Discord unlocks the Anthropic and OpenAI-compatible options.
  * A key that is ALREADY stored keeps working whatever the answer: the gate is
  * on adding one, and an upgrade must not strip a rider of the provider they
  * were already paying for.
+ *
+ * Split from byokUnlocked() because this is also the question "is it worth
+ * asking the service about accounts at all" -- a rider who is signed in, or
+ * already holds a key, is not waiting on that answer.
  */
-function byokUnlocked() {
+function byokUnlockedByOwnRight() {
     if (tokenKind(common.settingsStore.get(DEVICE_TOKEN_KEY)) === 'discord') return true;
     return !!(common.settingsStore.get('claudeApiKey') || common.settingsStore.get('compatApiKey'));
+}
+
+/**
+ * Has the service this window points at been found unable to do accounts?
+ *
+ * Compared against the CURRENT service URL, so a finding made somewhere else
+ * does not travel: point the mod back at a service that can sign riders in and
+ * the requirement is back.
+ */
+function serviceCannotDoAccounts() {
+    const found = common.settingsStore.get(NO_ACCOUNTS_KEY);
+    return !!found?.url && found.url === promptUpdates.serviceUrlFor(common.settingsStore);
+}
+
+/**
+ * May this rider configure a provider of their own?
+ *
+ * An account, a key they already had -- or a service that cannot mint an
+ * account, because a requirement nothing can satisfy is a dead end rather than
+ * a gate. Without that last case a self-hosted deployment with no Discord app
+ * configured locks its riders out of every provider except its own hosted
+ * models, which it may not have configured either.
+ */
+function byokUnlocked() {
+    return byokUnlockedByOwnRight() || serviceCannotDoAccounts();
+}
+
+/** Remember that this service cannot sign anyone in, and re-render the gate. */
+function noteNoAccounts(reason) {
+    const url = promptUpdates.serviceUrlFor(common.settingsStore);
+    const found = common.settingsStore.get(NO_ACCOUNTS_KEY);
+    // Both windows wake on a store write; do not wake them to say the same.
+    if (found?.url === url && found?.reason === reason) return;
+    common.settingsStore.set(NO_ACCOUNTS_KEY, { url, reason, foundAt: Date.now() });
+    renderByokLock();
+}
+
+/** It can, after all: a deployment that has since been given a Discord app. */
+function clearNoAccounts() {
+    if (!common.settingsStore.get(NO_ACCOUNTS_KEY)) return;
+    common.settingsStore.set(NO_ACCOUNTS_KEY, null);
+    renderByokLock();
 }
 
 /** Disable the own-key options, and say why, while there is no account. */
 function renderByokLock() {
     const unlocked = byokUnlocked();
+    const noAccounts = serviceCannotDoAccounts();
     const note = document.getElementById('byok-locked');
     const sel = document.querySelector('select[name="aiProvider"]');
 
@@ -2154,6 +2202,13 @@ function renderByokLock() {
     // version of the same thing.
     const noKeyHint = document.getElementById('no-key-hint');
     if (noKeyHint && !unlocked) noKeyHint.hidden = true;
+    // "Sign in to unlock your own API key" is untrue on a service that cannot
+    // sign anyone in: the key is already available there, and pressing Sign in
+    // would only 503. The other two benefits are untrue there as well, but they
+    // are claims about an account rather than about this gate, and the whole
+    // pitch is already hidden once a rider is signed in.
+    const byokBullet = document.getElementById('account-pitch-byok');
+    if (byokBullet) byokBullet.hidden = noAccounts;
 }
 
 /** Show one tab. Exported to the rest of the file, not just the tab strip. */
@@ -2684,7 +2739,13 @@ function setupHostedControls() {
         if (!url) throw new Error('Enter the service URL first');
         const res = await fetch(`${url}${path}`, options);
         const body = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(body?.error?.message || `Service error ${res.status}`);
+        if (!res.ok) {
+            // The code, not only the message: `accounts_unavailable` is the one
+            // refusal a caller has to branch on, and matching on prose would
+            // break the first time the service rewords it.
+            throw Object.assign(new Error(body?.error?.message || `Service error ${res.status}`),
+                { status: res.status, code: body?.error?.code || '' });
+        }
         return body;
     }
 
@@ -2845,6 +2906,15 @@ function setupHostedControls() {
             else { setStatus(`Signed in as ${name}`, 'success'); updateApiInfo(true); }
         } catch (err) {
             if (err?.name === 'AbortError') setStatus('Sign-in cancelled', '');
+            else if (err?.code === 'accounts_unavailable') {
+                // There is no sign-in to wait for on this service, so leaving
+                // the own-key providers behind an account would strand the
+                // rider with nothing. Unlock them and say so -- a bare
+                // "unavailable" gives them no next step.
+                noteNoAccounts(err.status === 503 ? 'pair-start-refused' : 'pair-start-failed');
+                setStatus(`${err.message} Your own API key is unlocked instead — pick ` +
+                    'Anthropic or OpenAI-compatible on the AI Provider tab.', 'warn');
+            }
             else setStatus(err.message || 'Sign-in failed', 'error');
         } finally {
             setPending(false);
@@ -2945,6 +3015,32 @@ function setupHostedControls() {
         }
         updateApiInfo(true);
     }
+
+    /**
+     * Can this service sign anyone in?
+     *
+     * /healthz has always reported it. Asked only while the answer matters: a
+     * rider already signed in, or already holding a key, has nothing riding on
+     * it, and this is one request per settings-window open.
+     *
+     * Never awaited -- the window has to finish wiring whatever the network
+     * does. An unreachable service, or one too old to report the field, leaves
+     * the gate exactly as it was: failing closed costs a rider one press of
+     * Sign in, which tells them the same thing; failing open would hand the
+     * unlock to anyone who opened settings while offline.
+     */
+    async function probeAccounts() {
+        if (byokUnlockedByOwnRight()) return;
+        try {
+            const health = await getJson('/healthz');
+            if (typeof health?.accounts !== 'string') return;
+            if (health.accounts === 'ready') clearNoAccounts();
+            else noteNoAccounts(health.accounts);
+        } catch {
+            // Offline, no service URL yet, or a deployment without /healthz.
+        }
+    }
+    probeAccounts();
 
     // A sign-in the rider walked away from. The browser takes the screen over
     // Zwift, so closing this window mid-OAuth is an ordinary thing to do -- and
