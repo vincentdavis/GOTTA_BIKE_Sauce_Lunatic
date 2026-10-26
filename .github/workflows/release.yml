@@ -145,8 +145,10 @@ jobs:
       # Every release from v0.4.1 to v0.8.9 carried the same fixed text, because
       # generate_release_notes lists PULL REQUESTS and this repo ships straight
       # to main -- so the generated half was only ever a compare link.
+      # NOT gated on publish: a dry run exists to walk this path without
+      # spending a tag, and a step it skips is a step nothing exercises until
+      # the real release.
       - name: Write the release notes
-        if: steps.ver.outputs.publish == 'true'
         run: |
           git fetch --quiet --tags origin || true
           node scripts/release-notes.mjs "${{ steps.ver.outputs.version }}" > build/NOTES.md
