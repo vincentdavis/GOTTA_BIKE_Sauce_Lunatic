@@ -16,6 +16,13 @@
  */
 import { execFileSync } from 'node:child_process';
 
+/**
+ * The version-bump commit. Every release has one and it says nothing a reader
+ * wants: v0.9.0's notes went out with a bullet reading "- 0.9.0". Only this
+ * exact shape is dropped -- other chores can be real changes.
+ */
+const VERSION_BUMP = /^chore(?:\([^)]*\))?!?:\s*v?\d+\.\d+\.\d+$/i;
+
 /** A conventional-commit type to the heading it belongs under. */
 const HEADINGS = {
     feat: 'New',
@@ -64,6 +71,7 @@ export function formatNotes({ tag, prev, subjects }) {
     const buckets = Object.fromEntries(ORDER.map(h => [h, []]));
 
     for (const subject of subjects) {
+        if (VERSION_BUMP.test(subject)) continue;
         const m = /^(\w+)(?:\(([^)]*)\))?!?:\s*(.+)$/.exec(subject);
         if (!m) {
             // Not a conventional commit. Keep it rather than dropping it: a
@@ -77,9 +85,10 @@ export function formatNotes({ tag, prev, subjects }) {
         buckets[heading].push(scope ? `**${scope}** — ${text}` : text);
     }
 
+    const listed = ORDER.reduce((n, h) => n + buckets[h].length, 0);
     const out = [`## What changed in ${tag}`, ''];
     if (prev) out.push(`Since ${prev}.`, '');
-    if (!subjects.length) out.push('No commits since the previous release.', '');
+    if (!listed) out.push('Nothing but the version bump since the previous release.', '');
     for (const heading of ORDER) {
         if (!buckets[heading].length) continue;
         out.push(`### ${heading}`, ...buckets[heading].map(l => `- ${l}`), '');

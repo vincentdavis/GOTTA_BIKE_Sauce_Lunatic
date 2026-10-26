@@ -66,8 +66,24 @@ section('the awkward ones');
     check('but still lists its commits', first.includes('- the first one'));
 
     const empty = formatNotes({ tag: 'v0.9.0', prev: 'v0.8.9', subjects: [] });
-    check('nothing to say says so', empty.includes('No commits since the previous release.'));
+    check('nothing to say says so', empty.includes('Nothing but the version bump'));
     check('and still carries the install steps', empty.includes('## Install'));
+
+    // v0.9.0 shipped with a bullet reading "- 0.9.0": every release has a
+    // version-bump commit and it says nothing a reader wants.
+    const bumped = formatNotes({
+        tag: 'v0.9.1', prev: 'v0.9.0',
+        subjects: ['chore: 0.9.1', 'fix(overlay): a real change']
+    });
+    check('the version bump is not a bullet', !/- 0\.9\.1/.test(bumped), bumped);
+    check('and the real change still is', /- \*\*overlay\*\* — a real change/.test(bumped));
+    check('a bump-only release says that, rather than printing empty headings',
+        formatNotes({ tag: 'v0.9.1', prev: 'v0.9.0', subjects: ['chore: v0.9.1'] })
+            .includes('Nothing but the version bump'));
+    // Not every chore is a version bump.
+    check('other chores survive',
+        /- bump a dependency/.test(formatNotes({
+            tag: 'v1.0.0', prev: 'v0.9.0', subjects: ['chore: bump a dependency'] })));
 
     const odd = formatNotes({
         tag: 'v1.0.0', prev: 'v0.9.0',
