@@ -37,6 +37,8 @@ scripts/prompt-parity-test.mjs     the mod and the service define the same voice
 scripts/prompt-library-test.mjs    the library's storage rules, driven directly
 scripts/prompt-updates-test.mjs    the update check, against the real service handler
 scripts/prompt-diff-test.mjs       the line diff and "your copy is behind" 
+scripts/release-notes.mjs          the notes for one version, from the commits in it
+scripts/release-notes-test.mjs     their shape, driven by subjects rather than a git history
 ```
 
 Run **both** boot tests after touching `announcer.mjs`. They are the only things
